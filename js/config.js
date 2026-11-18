@@ -1,21 +1,9 @@
-// =====================================================================
-//  הגדרות Firebase
-//  כאן מדביקים את ה-firebaseConfig שמקבלים ממסוף Firebase
-//  (Project settings → Your apps → SDK setup and configuration → Config)
-//
-//  כל עוד הערך הוא null, האפליקציה עובדת ב"מצב הדגמה":
-//  הנתונים נשמרים רק בדפדפן הנוכחי, ואין כניסה עם גוגל.
-// =====================================================================
-
-export const firebaseConfig = null;
-
-/* דוגמה למה שאמור להופיע כאן:
+// הגדרות Firebase של הפרויקט (אלה לא סודות — ההגנה על הנתונים היא בחוקי האבטחה של Firestore)
 export const firebaseConfig = {
-  apiKey: "AIza...",
-  authDomain: "my-limud.firebaseapp.com",
-  projectId: "my-limud",
-  storageBucket: "my-limud.firebasestorage.app",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abcdef123456"
+  apiKey: "AIzaSyDaX2sYYm4B7GjNoIcH8LrFR7dsHTBOaP4",
+  authDomain: "limud-yomi-41532.firebaseapp.com",
+  projectId: "limud-yomi-41532",
+  storageBucket: "limud-yomi-41532.firebasestorage.app",
+  messagingSenderId: "998596560359",
+  appId: "1:998596560359:web:c071b4b812b6c499926942"
 };
-*/
