@@ -11,7 +11,10 @@ import {
 
 const $app = document.getElementById('app');
 
+const MAX_AHEAD = 30; // אפשר לסמן עד חודש קדימה
+
 const state = {
+  online: navigator.onLine,
   demo: !firebaseConfig,
   fb: null,
   user: null,
@@ -82,6 +85,9 @@ async function start() {
       else render();
     });
   }
+  // מצב חיבור לאינטרנט
+  window.addEventListener('online', () => { state.online = true; render(); });
+  window.addEventListener('offline', () => { state.online = false; render(); });
   // מעבר יום בחצות
   setInterval(checkNewDay, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
@@ -125,6 +131,7 @@ function render() {
       <h1>📖 הלימוד היומי שלי</h1>
       ${state.user?.photoURL ? `<img class="avatar" src="${esc(state.user.photoURL)}" alt="" referrerpolicy="no-referrer">` : ''}
     </header>
+    ${!state.online && !state.demo ? '<div class="offline-banner">📴 אין חיבור לאינטרנט. אפשר להמשיך לסמן, והסימונים יסונכרנו כשהחיבור יחזור.</div>' : ''}
     ${state.demo ? '<div class="demo-banner">מצב הדגמה: הנתונים נשמרים רק בדפדפן הזה (Firebase עוד לא הוגדר)</div>' : ''}
     <main>${state.loaded ? views[state.view]() : '<div class="center-box"><div class="spinner"></div></div>'}</main>
     <nav class="tabs">
@@ -154,6 +161,7 @@ function loginView() {
 function todayView() {
   const ds = state.date;
   const isToday = ds === state.today;
+  const isFuture = ds > state.today;
   const tracks = sortedTracks();
 
   if (!tracks.length) {
@@ -183,10 +191,13 @@ function todayView() {
         <strong>יום ${WEEKDAY_NAMES[weekday(ds)]}${isToday ? ' (היום)' : ''}</strong>
         <span>${formatGreg(ds)} · ${formatHebrew(ds)}</span>
       </div>
-      <button class="icon-btn" data-act="day" data-delta="1" ${isToday ? 'disabled' : ''} title="יום הבא" aria-label="יום הבא">←</button>
+      <button class="icon-btn" data-act="day" data-delta="1" ${ds >= addDays(state.today, MAX_AHEAD) ? 'disabled' : ''} title="יום הבא" aria-label="יום הבא">←</button>
     </section>`;
 
-  if (!isToday) {
+  if (isFuture) {
+    html += `<div class="past-note future">📅 לימוד מראש: אפשר לסמן כאן לימוד ליום עתידי (עד חודש קדימה), למשל לפני חופשה.
+      <button class="link" data-act="goto-today">חזרה להיום</button></div>`;
+  } else if (!isToday) {
     html += `<div class="past-note">אתה צופה ביום שעבר, ואפשר להשלים כאן סימון.
       <button class="link" data-act="goto-today">חזרה להיום</button></div>`;
   }
@@ -420,7 +431,7 @@ function applyPreset(d, id) {
   const u = UNIT_TYPES[p.unit];
   Object.assign(d, {
     name: p.name, unitType: p.unit, unitLabel: u.label, unitPlural: u.plural, hebNums: true,
-    parts: JSON.parse(JSON.stringify(p.parts)),
+    parts: JSON.parse(JSON.stringify(p.parts)), perDay: p.perDay || d.perDay,
   });
 }
 
@@ -633,7 +644,7 @@ $app.addEventListener('click', (e) => {
     case 'view': state.view = el.dataset.view; state.draft = null; if (state.view === 'today') state.date = state.today; render(); window.scrollTo(0, 0); break;
     case 'day': {
       const nd = addDays(state.date, Number(el.dataset.delta));
-      if (nd <= state.today) { state.date = nd; render(); }
+      if (nd <= addDays(state.today, MAX_AHEAD)) { state.date = nd; render(); }
       break;
     }
     case 'goto-today': state.date = state.today; render(); break;

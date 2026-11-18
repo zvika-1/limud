@@ -18,7 +18,11 @@ import { gematria, addDays, weekday, holidayName, todayStr } from './hebrew.js';
  }
 */
 
-const partSize = (t, p) => (p.end - p.start + 1) * (t.amud ? 2 : 1);
+// חלק יכול להיות טווח פשוט {name, start, end}
+// או חלק עם פרקים {name, chapters: [מספר יחידות בכל פרק], chapterLabel: 'פרק'}
+const partSize = (t, p) => (p.chapters
+  ? p.chapters.reduce((a, b) => a + b, 0)
+  : (p.end - p.start + 1) * (t.amud ? 2 : 1));
 
 export function totalUnits(t) {
   return t.parts.reduce((s, p) => s + partSize(t, p), 0);
@@ -29,26 +33,33 @@ function locate(t, i) {
   for (const p of t.parts) {
     const size = partSize(t, p);
     if (idx < size) {
+      if (p.chapters) {
+        let c = 0;
+        while (idx >= p.chapters[c]) { idx -= p.chapters[c]; c++; }
+        return { part: p, chap: c + 1, num: idx + 1, side: 0 };
+      }
       return t.amud
         ? { part: p, num: p.start + Math.floor(idx / 2), side: idx % 2 }
         : { part: p, num: p.start + idx, side: 0 };
     }
     idx -= size;
   }
-  const last = t.parts[t.parts.length - 1];
-  return { part: last, num: last.end, side: t.amud ? 1 : 0 };
+  return locate(t, totalUnits(t) - 1);
 }
+
+const heb = (t, n, marks = true) => (t.hebNums ? gematria(n, marks) : String(n));
 
 function numText(t, loc) {
-  const n = t.hebNums ? gematria(loc.num, !t.amud) : String(loc.num);
-  if (!t.amud) return n;
-  return `${n} ${loc.side ? 'ע״ב' : 'ע״א'}`;
+  if (!t.amud || loc.chap) return heb(t, loc.num);
+  return `${heb(t, loc.num, false)} ${loc.side ? 'ע״ב' : 'ע״א'}`;
 }
 
-/** שם של יחידה אחת, למשל "ברכות דף ב ע״א" או "פרק ג׳" */
+const chapText = (t, loc) => (loc.chap ? `${loc.part.chapterLabel || 'פרק'} ${heb(t, loc.chap)}` : '');
+
+/** שם של יחידה אחת, למשל "ברכות דף ב ע״א" או "ברכות פרק א׳ משנה ב׳" */
 export function unitName(t, i) {
   const loc = locate(t, i);
-  return [loc.part.name, t.unitLabel, numText(t, loc)].filter(Boolean).join(' ');
+  return [loc.part.name, chapText(t, loc), t.unitLabel, numText(t, loc)].filter(Boolean).join(' ');
 }
 
 /** טקסט לטווח יחידות, למשל "בראשית פרקים א׳–ב׳" */
@@ -56,9 +67,13 @@ export function rangeName(t, from, count) {
   if (count <= 1) return unitName(t, from);
   const a = locate(t, from);
   const b = locate(t, from + count - 1);
-  if (a.part === b.part) {
-    const word = t.amud ? t.unitLabel : (t.unitPlural || t.unitLabel);
-    return [a.part.name, word, `${numText(t, a)} – ${numText(t, b)}`].filter(Boolean).join(' ');
+  const plural = t.unitPlural || t.unitLabel;
+  if (a.part === b.part && a.chap === b.chap) {
+    const word = t.amud && !a.chap ? t.unitLabel : plural;
+    return [a.part.name, chapText(t, a), word, `${numText(t, a)} – ${numText(t, b)}`].filter(Boolean).join(' ');
+  }
+  if (a.part === b.part && a.chap) {
+    return `${a.part.name} ${chapText(t, a)} ${t.unitLabel} ${numText(t, a)} – ${chapText(t, b)} ${t.unitLabel} ${numText(t, b)}`;
   }
   return `${unitName(t, from)} – ${unitName(t, from + count - 1)}`;
 }
@@ -196,7 +211,9 @@ export function estimatedFinish(t, today = todayStr()) {
   }
   let remaining = total - progressPos(t);
   if (remaining <= 0) return null;
-  let d = t.log?.[today] ? addDays(today, 1) : today;
+  // מתחילים אחרי היום האחרון שסומן (כולל סימונים מראש לימים עתידיים)
+  const last = Object.keys(t.log || {}).sort().pop();
+  let d = last && last >= today ? addDays(last, 1) : today;
   for (let guard = 0; guard < 20000; guard++) {
     if (isLearningDay(t, d)) {
       remaining -= t.perDay;
