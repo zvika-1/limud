@@ -17,14 +17,15 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // מפתח החתימה של האפליקציה. חייב להישאר קבוע, אחרת אי אפשר לעדכן את האפליקציה
-    // והכניסה עם גוגל מפסיקה לעבוד (טביעת האצבע SHA-1 שלו רשומה ב-Firebase).
+    // מפתח החתימה של האפליקציה. הוא לא נמצא במאגר: GitHub מקבל אותו מה-Secrets
+    // (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD) בזמן הבנייה.
+    // חייב להישאר קבוע, אחרת אי אפשר לעדכן את האפליקציה והכניסה עם גוגל מפסיקה לעבוד.
     signingConfigs {
         release {
             storeFile rootProject.file('limud-release.jks')
-            storePassword 'limud-yomi-2026'
+            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
             keyAlias 'limud'
-            keyPassword 'limud-yomi-2026'
+            keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
         }
     }
     buildTypes {
