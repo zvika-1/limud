@@ -1,6 +1,9 @@
 // שמירת הנתונים: בענן (Firebase) או מקומית בדפדפן (מצב הדגמה)
 
-const FB = 'https://www.gstatic.com/firebasejs/13.3.0';
+// ספריות Firebase שמורות בתוך האתר עצמו (תיקיית vendor), כדי שהאפליקציה תעבוד גם בלי אינטרנט
+const FB = new URL('../vendor/firebase', import.meta.url).href;
+
+export const isNative = !!window.Capacitor?.isNativePlatform?.();
 
 /** אחסון מקומי — משמש כשעוד לא הוגדר Firebase */
 export class LocalStore {
@@ -66,15 +69,40 @@ export class CloudStore {
   }
 }
 
+const AUTH_ERRORS = {
+  'auth/invalid-credential': 'המייל או הסיסמה שגויים',
+  'auth/wrong-password': 'המייל או הסיסמה שגויים',
+  'auth/user-not-found': 'המייל או הסיסמה שגויים',
+  'auth/invalid-email': 'כתובת המייל לא תקינה',
+  'auth/missing-password': 'צריך להקליד סיסמה',
+  'auth/weak-password': 'הסיסמה צריכה להכיל לפחות 6 תווים',
+  'auth/email-already-in-use': 'כבר יש חשבון עם המייל הזה. אם נכנסת עד עכשיו עם גוגל, היכנס עם גוגל ואז קבע סיסמה במסך ההגדרות.',
+  'auth/provider-already-linked': 'כבר קבעת סיסמה לחשבון הזה',
+  'auth/credential-already-in-use': 'המייל הזה כבר משויך לחשבון אחר',
+  'auth/requires-recent-login': 'מטעמי אבטחה צריך להתנתק, להתחבר מחדש ולנסות שוב',
+  'auth/too-many-requests': 'יותר מדי ניסיונות. נסה שוב בעוד כמה דקות',
+  'auth/network-request-failed': 'אין חיבור לאינטרנט',
+  'auth/operation-not-allowed': 'סוג הכניסה הזה עוד לא הופעל ב-Firebase',
+  'auth/unauthorized-domain': 'הכתובת של האתר לא מאושרת ב-Firebase (Authorized domains)',
+};
+
+/** הודעת שגיאה בעברית */
+export function authErrorText(e) {
+  return AUTH_ERRORS[e?.code] || e?.message || String(e);
+}
+
 /** טוען את Firebase ומחזיר פונקציות להתחברות */
-export async function initFirebase(config) {
+export async function initFirebase(config, googleWebClientId) {
   const [appMod, authMod, fs] = await Promise.all([
     import(`${FB}/firebase-app.js`),
     import(`${FB}/firebase-auth.js`),
     import(`${FB}/firebase-firestore.js`),
   ]);
   const app = appMod.initializeApp(config);
-  const auth = authMod.getAuth(app);
+  // באפליקציית אנדרואיד אין חלונות קופצים, לכן הכניסה עם גוגל נעשית דרך מערכת ההפעלה
+  const auth = isNative
+    ? authMod.initializeAuth(app, { persistence: [authMod.indexedDBLocalPersistence] })
+    : authMod.getAuth(app);
   let db;
   try {
     db = fs.initializeFirestore(app, {
@@ -83,9 +111,23 @@ export async function initFirebase(config) {
   } catch {
     db = fs.getFirestore(app);
   }
+
+  let socialReady = null;
+  async function nativeGoogle() {
+    if (!googleWebClientId) throw new Error('הכניסה עם גוגל באפליקציה עוד לא הוגדרה. אפשר בינתיים להיכנס עם מייל וסיסמה.');
+    const SocialLogin = window.Capacitor.registerPlugin('SocialLogin');
+    socialReady ??= SocialLogin.initialize({ google: { webClientId: googleWebClientId, skipAuthOnlyAuthorizationAfterSignIn: true } });
+    await socialReady;
+    const res = await SocialLogin.login({ provider: 'google', options: {} });
+    const idToken = res?.result?.idToken || res?.idToken;
+    if (!idToken) throw new Error('לא התקבל אישור מגוגל');
+    await authMod.signInWithCredential(auth, authMod.GoogleAuthProvider.credential(idToken));
+  }
+
   return {
     onUser(cb) { return authMod.onAuthStateChanged(auth, cb); },
     async signIn() {
+      if (isNative) return nativeGoogle();
       const provider = new authMod.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       try {
@@ -97,6 +139,16 @@ export async function initFirebase(config) {
           throw e;
         }
       }
+    },
+    signInEmail(email, password) { return authMod.signInWithEmailAndPassword(auth, email.trim(), password); },
+    signUpEmail(email, password) { return authMod.createUserWithEmailAndPassword(auth, email.trim(), password); },
+    resetPassword(email) { return authMod.sendPasswordResetEmail(auth, email.trim()); },
+    hasPassword() { return !!auth.currentUser?.providerData.some((p) => p.providerId === 'password'); },
+    /** קביעת סיסמה לחשבון שנכנס עם גוגל, כדי שאפשר יהיה להיכנס גם עם מייל וסיסמה */
+    async setPassword(password) {
+      const user = auth.currentUser;
+      if (this.hasPassword()) return authMod.updatePassword(user, password);
+      return authMod.linkWithCredential(user, authMod.EmailAuthProvider.credential(user.email, password));
     },
     signOut() { return authMod.signOut(auth); },
     storeFor(uid) { return new CloudStore(db, fs, uid); },

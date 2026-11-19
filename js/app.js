@@ -1,5 +1,5 @@
-import { firebaseConfig } from './config.js';
-import { LocalStore, initFirebase } from './store.js';
+import { firebaseConfig, googleWebClientId } from './config.js';
+import { LocalStore, initFirebase, isNative, authErrorText } from './store.js';
 import { PRESETS, UNIT_TYPES, findPreset, pickAll, pickParts, migratePresetId } from './books.js';
 import {
   todayStr, addDays, formatGreg, formatHebrew, formatShort, weekday, WEEKDAY_NAMES, WEEKDAY_SHORT,
@@ -51,7 +51,7 @@ async function safe(fn) {
     await fn();
   } catch (e) {
     console.error(e);
-    toast('שגיאה: ' + (e?.message || e));
+    toast(e?.code?.startsWith?.('auth/') ? authErrorText(e) : 'שגיאה: ' + (e?.message || e));
   }
 }
 
@@ -68,7 +68,7 @@ async function start() {
   } else {
     render();
     try {
-      state.fb = await initFirebase(firebaseConfig);
+      state.fb = await initFirebase(firebaseConfig, googleWebClientId);
     } catch (e) {
       console.error(e);
       $app.innerHTML = `<div class="center-box"><h2>לא הצלחתי להתחבר לשרת</h2>
@@ -91,7 +91,7 @@ async function start() {
   // מעבר יום בחצות
   setInterval(checkNewDay, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (!isNative && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 function connectStore(store) {
@@ -152,6 +152,18 @@ function loginView() {
         <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
         כניסה עם חשבון Google
       </button>
+      <div class="or"><span>או</span></div>
+      <form class="email-login" id="email-form" autocomplete="on">
+        <input type="email" id="login-email" placeholder="כתובת מייל" autocomplete="email" dir="ltr" required>
+        <input type="password" id="login-password" placeholder="סיסמה" autocomplete="current-password" dir="ltr">
+        <button type="submit" class="btn primary">כניסה עם מייל וסיסמה</button>
+        <div class="row center">
+          <button type="button" class="link" data-act="signup-email">יצירת חשבון חדש</button>
+          <span class="muted">·</span>
+          <button type="button" class="link" data-act="reset-pw">שכחתי סיסמה</button>
+        </div>
+      </form>
+      <p class="muted small">נכנסת עד עכשיו עם גוגל ורוצה גם סיסמה? היכנס עם גוגל, ואז קבע סיסמה במסך "הגדרות".</p>
     </div>
   </div>`;
 }
@@ -660,6 +672,16 @@ function settingsView() {
          <p class="muted">הנתונים נשמרים בענן, ומופיעים בכל מכשיר שבו תתחבר עם אותו חשבון.</p>
          <button class="btn" data-act="logout">התנתקות</button>`}
   </section>
+  ${state.demo ? '' : `<section class="card col">
+    <h3>כניסה עם מייל וסיסמה</h3>
+    <p class="muted">${state.fb.hasPassword()
+      ? 'כבר קבעת סיסמה. אפשר להיכנס גם עם המייל והסיסמה (למשל באפליקציה בטאבלט). כאן אפשר לשנות אותה.'
+      : 'קביעת סיסמה מאפשרת להיכנס לאותו חשבון ולאותם נתונים גם עם המייל והסיסמה (למשל באפליקציה בטאבלט).'}</p>
+    <form class="row" id="password-form">
+      <input type="password" id="new-password" placeholder="סיסמה חדשה (לפחות 6 תווים)" autocomplete="new-password" dir="ltr" minlength="6" required style="max-width:260px">
+      <button type="submit" class="btn primary">${state.fb.hasPassword() ? 'שינוי סיסמה' : 'קביעת סיסמה'}</button>
+    </form>
+  </section>`}
   <section class="card col">
     <h3>גיבוי</h3>
     <p class="muted">שמירת כל הספרים והסימונים לקובץ במחשב או בטלפון, ושחזור מקובץ כזה.</p>
@@ -706,6 +728,18 @@ $app.addEventListener('click', (e) => {
   switch (act) {
     case 'login': safe(() => state.fb.signIn()); break;
     case 'logout': safe(() => state.fb.signOut()); break;
+    case 'signup-email': {
+      const [email, pw] = loginFields();
+      if (!email || pw.length < 6) { toast('כדי ליצור חשבון, כתוב מייל וסיסמה של לפחות 6 תווים'); break; }
+      safe(() => state.fb.signUpEmail(email, pw));
+      break;
+    }
+    case 'reset-pw': {
+      const [email] = loginFields();
+      if (!email) { toast('כתוב קודם את כתובת המייל'); break; }
+      safe(async () => { await state.fb.resetPassword(email); toast('נשלח מייל לאיפוס סיסמה (בדוק גם בספאם)'); });
+      break;
+    }
     case 'view': state.view = el.dataset.view; state.draft = null; if (state.view === 'today') state.date = state.today; render(); window.scrollTo(0, 0); break;
     case 'day': {
       const nd = addDays(state.date, Number(el.dataset.delta));
@@ -790,9 +824,19 @@ $app.addEventListener('change', (e) => {
   }
 });
 
+const loginFields = () => [document.getElementById('login-email')?.value || '', document.getElementById('login-password')?.value || ''];
+
 $app.addEventListener('submit', (e) => {
   e.preventDefault();
-  safe(saveDraft);
+  if (e.target.id === 'email-form') {
+    const [email, pw] = loginFields();
+    safe(() => state.fb.signInEmail(email, pw));
+  } else if (e.target.id === 'password-form') {
+    const pw = document.getElementById('new-password').value;
+    safe(async () => { await state.fb.setPassword(pw); toast('הסיסמה נשמרה ✓'); render(); });
+  } else {
+    safe(saveDraft);
+  }
 });
 
 start();
