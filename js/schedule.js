@@ -44,7 +44,8 @@ function locate(t, i) {
     }
     idx -= size;
   }
-  return locate(t, totalUnits(t) - 1);
+  const n = totalUnits(t);
+  return n > 0 && i !== n - 1 ? locate(t, n - 1) : { part: { name: '' }, num: 0, side: 0 };
 }
 
 const heb = (t, n, marks = true) => (t.hebNums ? gematria(n, marks) : String(n));

@@ -1,6 +1,6 @@
 import { firebaseConfig } from './config.js';
 import { LocalStore, initFirebase } from './store.js';
-import { PRESETS, UNIT_TYPES, findPreset } from './books.js';
+import { PRESETS, UNIT_TYPES, findPreset, pickAll, pickParts, migratePresetId } from './books.js';
 import {
   todayStr, addDays, formatGreg, formatHebrew, formatShort, weekday, WEEKDAY_NAMES, WEEKDAY_SHORT,
 } from './hebrew.js';
@@ -316,9 +316,56 @@ function booksView() {
 // ---------- טופס הוספה/עריכה ----------
 
 function startDraft(t) {
-  state.draft = t ? JSON.parse(JSON.stringify(t)) : newTrack({ presetId: '', unitType: 'perek', name: '' });
-  state.draft._isNew = !t;
+  const d = t ? JSON.parse(JSON.stringify(t)) : newTrack({ presetId: '', unitType: 'perek', name: '' });
+  d._isNew = !t;
+  d._autoName = !t;
+  if (t) {
+    // לימודים שנוצרו לפני שהיתה בחירת ספרים
+    const old = migratePresetId(d.presetId);
+    if (old) {
+      d.presetId = old[0];
+      d.parts = pickParts(findPreset(old[0]), old[1]);
+    }
+    if (findPreset(d.presetId)?.pick) d.picked = d.parts.map((p) => p.name);
+  }
+  state.draft = d;
   state.view = 'edit';
+}
+
+/** עדכון החלקים והשם אחרי שינוי בבחירת ספרים/מסכתות */
+function applyPick(d, names) {
+  const preset = findPreset(d.presetId);
+  d.picked = names;
+  d.parts = pickParts(preset, names);
+  d.startPos = 0;
+  if (d._autoName) {
+    const all = names.length === pickAll(preset).length;
+    // בחירה של קבוצה שלמה בדיוק (למשל "סדר מועד" או "תורה") מקבלת את שם הקבוצה
+    const exact = preset.pick.groups.find((g) => g.items.length === names.length
+      && g.items.every((it) => names.includes(it.name)) && g.items.length > 1);
+    d.name = !names.length ? ''
+      : !all && exact ? preset.pick.prefix + exact.title
+        : preset.pick.nameFor(d.parts.map((p) => p.name), all);
+  }
+}
+
+function pickView(d, preset) {
+  const picked = new Set(d.picked || []);
+  const total = pickAll(preset).length;
+  return `<fieldset class="field">
+    <legend>${esc(preset.pick.label)} <span class="muted">(נבחרו ${picked.size} מתוך ${total})</span></legend>
+    <div class="row pick-actions">
+      <button type="button" class="btn small" data-act="pick-all">בחר הכול</button>
+      <button type="button" class="btn small" data-act="pick-none">נקה הכול</button>
+    </div>
+    ${preset.pick.groups.map((g, gi) => `
+      <div class="pick-group">
+        <button type="button" class="link pick-title" data-act="pick-group" data-group="${gi}" title="בחירה או ביטול של כל הקבוצה">${esc(g.title)}</button>
+        <div class="days">
+          ${g.items.map((it) => `<label class="day-chip"><input type="checkbox" data-field="pick" data-name="${esc(it.name)}" ${picked.has(it.name) ? 'checked' : ''}><span>${esc(it.name)}</span></label>`).join('')}
+        </div>
+      </div>`).join('')}
+  </fieldset>`;
 }
 
 function editView() {
@@ -343,6 +390,8 @@ function editView() {
         ${presetOptions}
       </select>
     </label>
+
+    ${preset?.pick ? pickView(d, preset) : ''}
 
     <label class="field">
       <span>שם הלימוד</span>
@@ -373,7 +422,7 @@ function editView() {
             <option value="1" ${d.hebNums ? 'selected' : ''}>באותיות (א׳, ב׳…)</option>
             <option value="0" ${!d.hebNums ? 'selected' : ''}>במספרים (1, 2…)</option>
           </select></label>
-      </div>` : `<p class="muted">${esc(preset.name)}: ${total} ${esc(d.amud ? 'עמודים' : d.unitPlural)} בסך הכול</p>`}
+      </div>` : `<p class="muted">${total ? `${total} ${esc(d.amud ? 'עמודים' : d.unitPlural)} בסך הכול` : 'עוד לא נבחר כלום'}</p>`}
 
     ${allowAmud ? `<label class="check-field"><input type="checkbox" data-field="amud" ${d.amud ? 'checked' : ''}>
       לימוד לפי עמודים (ע״א / ע״ב) במקום דפים שלמים</label>` : ''}
@@ -431,8 +480,15 @@ function applyPreset(d, id) {
   const u = UNIT_TYPES[p.unit];
   Object.assign(d, {
     name: p.name, unitType: p.unit, unitLabel: u.label, unitPlural: u.plural, hebNums: true,
-    parts: JSON.parse(JSON.stringify(p.parts)), perDay: p.perDay || d.perDay,
+    perDay: p.perDay || d.perDay,
   });
+  if (p.pick) {
+    d._autoName = true;
+    applyPick(d, pickAll(p).map((x) => x.name)); // ברירת מחדל: הכול מסומן
+  } else {
+    d.parts = JSON.parse(JSON.stringify(p.parts));
+    delete d.picked;
+  }
 }
 
 /** קורא שדה מהטופס לתוך הטיוטה. מחזיר true אם צריך לצייר מחדש */
@@ -443,7 +499,13 @@ function updateDraftField(el) {
   const int = (x, min = 1) => Math.max(min, parseInt(x, 10) || min);
   switch (f) {
     case 'presetId': applyPreset(d, v); return true;
-    case 'name': d.name = v; return false;
+    case 'name': d.name = v; d._autoName = false; return false;
+    case 'pick': {
+      const set = new Set(d.picked || []);
+      if (el.checked) set.add(el.dataset.name); else set.delete(el.dataset.name);
+      applyPick(d, [...set]);
+      return true;
+    }
     case 'unitType': {
       d.unitType = v;
       const u = UNIT_TYPES[v];
@@ -476,6 +538,7 @@ function updateDraftField(el) {
 
 async function saveDraft() {
   const d = state.draft;
+  if (!d.parts.length) return toast('צריך לבחור לפחות ספר או מסכת אחת');
   if (!d.name.trim()) return toast('צריך לתת שם ללימוד');
   if (!d.unitLabel.trim()) return toast('צריך לכתוב את שם יחידת הלימוד');
   if (d.parts.some((p) => p.end < p.start)) return toast('מספר הסיום קטן ממספר ההתחלה');
@@ -485,6 +548,8 @@ async function saveDraft() {
   const t = { ...d, name: d.name.trim() };
   if (!t.unitPlural) t.unitPlural = t.unitLabel;
   delete t._isNew;
+  delete t._autoName;
+  delete t.picked;
   await state.store.saveTrack(t);
   toast(d._isNew ? 'הספר נוסף ✓' : 'השינויים נשמרו ✓');
   state.draft = null;
@@ -681,6 +746,25 @@ $app.addEventListener('click', (e) => {
     case 'delete':
       if (confirm(`למחוק את "${t.name}" וכל הסימונים שלו? אי אפשר לבטל.`)) safe(() => state.store.deleteTrack(id));
       break;
+    case 'pick-all':
+    case 'pick-none':
+    case 'pick-group': {
+      const d = state.draft;
+      const preset = findPreset(d.presetId);
+      let names;
+      if (act === 'pick-all') names = pickAll(preset).map((x) => x.name);
+      else if (act === 'pick-none') names = [];
+      else {
+        const g = preset.pick.groups[Number(el.dataset.group)].items.map((x) => x.name);
+        const cur = new Set(d.picked || []);
+        const allIn = g.every((n) => cur.has(n));
+        g.forEach((n) => (allIn ? cur.delete(n) : cur.add(n)));
+        names = [...cur];
+      }
+      applyPick(d, names);
+      render();
+      break;
+    }
     case 'cancel-edit': state.draft = null; state.view = 'books'; render(); break;
     case 'export': exportBackup(); break;
     default: break;

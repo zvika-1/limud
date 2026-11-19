@@ -192,6 +192,9 @@ input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: 1
 .day-chip span { display: inline-block; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--line); cursor: pointer; font-size: .9rem; }
 .day-chip input:checked + span { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .day-chip input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pick-actions { margin-bottom: 8px; }
+.pick-group { margin-bottom: 6px; }
+.pick-title { font-size: .9rem; margin-bottom: 4px; display: inline-block; }
 .form-actions { display: flex; gap: 10px; }
 
 /* ---- סטטיסטיקה ---- */

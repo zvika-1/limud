@@ -1,5 +1,5 @@
 // Service worker: מאפשר לאפליקציה להיפתח מהר וגם בלי אינטרנט
-const CACHE = 'limud-v3';
+const CACHE = 'limud-v4';
 const FB = 'https://www.gstatic.com/firebasejs/13.3.0/';
 const FILES = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',

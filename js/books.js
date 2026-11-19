@@ -61,31 +61,49 @@ const chapters = (list) => list.map(([name, n]) => ({ name, start: 1, end: n }))
 const PRESETS = [];
 const group = (title, items) => PRESETS.push({ title, items });
 
-group('תנ״ך', [
-  { id: 'tanach', name: 'תנ״ך כולו', unit: 'perek', parts: chapters([...TORAH, ...NEVIIM, ...KETUVIM]) },
-  { id: 'torah', name: 'חמישה חומשי תורה', unit: 'perek', parts: chapters(TORAH) },
-  { id: 'neviim', name: 'נביאים', unit: 'perek', parts: chapters(NEVIIM) },
-  { id: 'ketuvim', name: 'כתובים', unit: 'perek', parts: chapters(KETUVIM) },
-  ...[...TORAH, ...NEVIIM, ...KETUVIM].map(([name, n]) => ({
-    id: `tanach:${name}`, name, unit: 'perek', parts: [{ name: '', start: 1, end: n }],
-  })),
-]);
+// ספר עם בחירה: מציג רשימת ספרים/מסכתות לבחירה בטופס, במקום עשרות שורות ברשימה הראשית
+// pick.groups: [{ title, items: [part, ...] }], pick.nameFor(names, all) → שם הלימוד
+const seder = (list, from, to) => list.slice(from, to + 1);
+const SEDARIM = [['זרעים', 0, 10], ['מועד', 11, 22], ['נשים', 23, 29], ['נזיקין', 30, 39], ['קדשים', 40, 50], ['טהרות', 51, 62]];
+const BAVLI_SEDARIM = [['זרעים', 0, 0], ['מועד', 1, 12], ['נשים', 13, 19], ['נזיקין', 20, 27], ['קדשים', 28, 38], ['טהרות', 39, 39]];
+const listNames = (prefix, names) => (names.length <= 3 ? `${prefix} ${names.join(', ')}` : `${prefix} (${names.length} ${prefix === 'תנ״ך:' ? 'ספרים' : 'מסכתות'})`);
 
-group('משנה', [
-  { id: 'mishna-yomit', name: 'משנה יומית – כל המשניות לפי הסדר', unit: 'mishna', perDay: 2,
-    parts: MISHNA.map(([name], i) => ({ name, chapters: MISHNA_COUNTS[i], chapterLabel: 'פרק' })) },
-  { id: 'mishna', name: 'משנה – ששה סדרים (לפי פרקים)', unit: 'perek', parts: chapters(MISHNA) },
-  ...MISHNA.map(([name, n]) => ({
-    id: `mishna:${name}`, name: `משנה ${name}`, unit: 'perek', parts: [{ name: '', start: 1, end: n }],
-  })),
+const mishnaPerek = MISHNA.map(([name, n]) => ({ name, start: 1, end: n }));
+const mishnaYomit = MISHNA.map(([name], i) => ({ name, chapters: MISHNA_COUNTS[i], chapterLabel: 'פרק' }));
+const bavliParts = BAVLI.map(([name, start, end]) => ({ name, start, end }));
+
+group('תנ״ך ומשנה', [
+  { id: 'tanach', name: 'תנ״ך (בחירת ספרים)', unit: 'perek',
+    pick: {
+      label: 'אילו ספרים?', prefix: '',
+      groups: [['תורה', TORAH], ['נביאים', NEVIIM], ['כתובים', KETUVIM]]
+        .map(([title, list]) => ({ title, items: chapters(list) })),
+      nameFor: (names, all) => (all ? 'תנ״ך כולו' : names.length === 1 ? names[0] : listNames('תנ״ך:', names)),
+    } },
+  { id: 'mishna-yomit', name: 'משנה יומית (לפי משניות)', unit: 'mishna', perDay: 2,
+    pick: {
+      label: 'אילו מסכתות?',
+      groups: SEDARIM.map(([title, a, b]) => ({ title: `סדר ${title}`, items: seder(mishnaYomit, a, b) })),
+      prefix: 'משנה יומית – ',
+      nameFor: (names, all) => (all ? 'משנה יומית – כל המשניות' : names.length === 1 ? `משנה ${names[0]}` : listNames('משנה:', names)),
+    } },
+  { id: 'mishna', name: 'משנה (לפי פרקים)', unit: 'perek',
+    pick: {
+      label: 'אילו מסכתות?',
+      groups: SEDARIM.map(([title, a, b]) => ({ title: `סדר ${title}`, items: seder(mishnaPerek, a, b) })),
+      prefix: 'משנה – ',
+      nameFor: (names, all) => (all ? 'משנה – ששה סדרים' : names.length === 1 ? `משנה ${names[0]}` : listNames('משנה:', names)),
+    } },
 ]);
 
 group('תלמוד בבלי', [
-  { id: 'shas', name: 'ש״ס בבלי (סדר הדף היומי)', unit: 'daf', allowAmud: true,
-    parts: BAVLI.map(([name, start, end]) => ({ name, start, end })) },
-  ...BAVLI.map(([name, start, end]) => ({
-    id: `bavli:${name}`, name: `מסכת ${name}`, unit: 'daf', allowAmud: true, parts: [{ name: '', start, end }],
-  })),
+  { id: 'shas', name: 'תלמוד בבלי (בחירת מסכתות)', unit: 'daf', allowAmud: true,
+    pick: {
+      label: 'אילו מסכתות?',
+      groups: BAVLI_SEDARIM.map(([title, a, b]) => ({ title: `סדר ${title}`, items: seder(bavliParts, a, b) })),
+      prefix: 'בבלי – ',
+      nameFor: (names, all) => (all ? 'ש״ס בבלי (סדר הדף היומי)' : names.length === 1 ? `מסכת ${names[0]}` : listNames('בבלי:', names)),
+    } },
 ]);
 
 group('הלכה', [
@@ -116,5 +134,29 @@ export { PRESETS };
 
 export function findPreset(id) {
   for (const g of PRESETS) for (const it of g.items) if (it.id === id) return it;
+  return null;
+}
+
+/** כל החלקים האפשריים של ספר עם בחירה, לפי הסדר */
+export function pickAll(preset) {
+  return preset.pick.groups.flatMap((g) => g.items);
+}
+
+/** חלקים שנבחרו לפי שמות, תמיד בסדר הקבוע של הספר */
+export function pickParts(preset, names) {
+  const set = new Set(names);
+  return JSON.parse(JSON.stringify(pickAll(preset).filter((p) => set.has(p.name))));
+}
+
+// מזהים ישנים (לפני שהיתה בחירה) → הספר החדש + הבחירה
+const OLD_IDS = {
+  torah: ['tanach', TORAH.map((x) => x[0])],
+  neviim: ['tanach', NEVIIM.map((x) => x[0])],
+  ketuvim: ['tanach', KETUVIM.map((x) => x[0])],
+};
+export function migratePresetId(id) {
+  if (OLD_IDS[id]) return OLD_IDS[id];
+  const m = /^(tanach|mishna|bavli):(.+)$/.exec(id || '');
+  if (m) return [m[1] === 'bavli' ? 'shas' : m[1], [m[2]]];
   return null;
 }
