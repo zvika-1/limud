@@ -115,10 +115,17 @@ export async function initFirebase(config, googleWebClientId) {
   let socialReady = null;
   async function nativeGoogle() {
     if (!googleWebClientId) throw new Error('הכניסה עם גוגל באפליקציה עוד לא הוגדרה. אפשר בינתיים להיכנס עם מייל וסיסמה.');
-    const SocialLogin = window.Capacitor.registerPlugin('SocialLogin');
+    // הרכיב של אנדרואיד לכניסה עם גוגל (נבנה מ-app/native-entry.js)
+    const { SocialLogin } = await import(new URL('../vendor/capacitor/native.js', import.meta.url).href);
     socialReady ??= SocialLogin.initialize({ google: { webClientId: googleWebClientId, skipAuthOnlyAuthorizationAfterSignIn: true } });
     await socialReady;
-    const res = await SocialLogin.login({ provider: 'google', options: {} });
+    let res;
+    try {
+      res = await SocialLogin.login({ provider: 'google', options: {} });
+    } catch (e) {
+      if (/cancel/i.test(e?.message || '')) return;
+      throw new Error('הכניסה עם גוגל נכשלה (' + (e?.message || e) + '). אפשר להיכנס עם מייל וסיסמה.');
+    }
     const idToken = res?.result?.idToken || res?.idToken;
     if (!idToken) throw new Error('לא התקבל אישור מגוגל');
     await authMod.signInWithCredential(auth, authMod.GoogleAuthProvider.credential(idToken));
