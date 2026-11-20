@@ -124,6 +124,9 @@ export async function initFirebase(config, googleWebClientId) {
       res = await SocialLogin.login({ provider: 'google', options: {} });
     } catch (e) {
       if (/cancel/i.test(e?.message || '')) return;
+      if (/no provider dependencies|play services/i.test(e?.message || '')) {
+        throw new Error('במכשיר הזה אין שירותי Google Play מעודכנים, ולכן הכניסה עם גוגל לא זמינה בו. אפשר להיכנס עם מייל וסיסמה.');
+      }
       throw new Error('הכניסה עם גוגל נכשלה (' + (e?.message || e) + '). אפשר להיכנס עם מייל וסיסמה.');
     }
     const idToken = res?.result?.idToken || res?.idToken;
