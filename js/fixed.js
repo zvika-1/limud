@@ -57,7 +57,7 @@ export function fixedLabel(t, ds) {
     }
     case 'chok': {
       const p = parshaForDate(ds, t.region);
-      return p && `פרשת ${p.name} – ${w === 6 ? 'שבת קודש' : `יום ${WEEKDAY_NAMES[w]}`} (תורה: ${aliyaRef(p.aliyot[w])})`;
+      return p && `${p.name} – יום ${w === 6 ? 'שבת' : gematria(w + 1)}`;
     }
     default:
       return null;
