@@ -1,4 +1,4 @@
-import { firebaseConfig, googleWebClientId } from './config.js';
+import { firebaseConfig, googleWebClientId, adminUid } from './config.js';
 import { LocalStore, initFirebase, isNative, authErrorText } from './store.js';
 import { PRESETS, UNIT_TYPES, findPreset, pickAll, pickParts, migratePresetId } from './books.js';
 import {
@@ -115,7 +115,10 @@ async function start() {
       state.unsubscribe?.();
       state.tracks = [];
       state.loaded = false;
-      if (user) connectStore(state.fb.storeFor(user.uid));
+      if (user) {
+        connectStore(state.fb.storeFor(user.uid));
+        state.fb.recordMember(user);
+      }
       else render();
     });
   }
@@ -813,6 +816,7 @@ function settingsView() {
          <p class="muted">הנתונים נשמרים בענן, ומופיעים בכל מכשיר שבו תתחבר עם אותו חשבון.</p>
          <button class="btn" data-act="logout">התנתקות</button>`}
   </section>
+  ${!state.demo && adminUid && state.user?.uid === adminUid ? membersSection() : ''}
   ${state.demo ? '' : `<section class="card col">
     <h3>כניסה עם מייל וסיסמה</h3>
     <p class="muted">${state.fb.hasPassword()
@@ -850,6 +854,24 @@ function settingsView() {
     <p><b>אנדרואיד (Chrome):</b> תפריט ⋮ ← "הוספה למסך הבית" / "התקנת אפליקציה".</p>
     <p><b>אייפון (Safari):</b> כפתור השיתוף ⬆️ ← "הוסף למסך הבית".</p>
   </section>`;
+}
+
+function membersSection() {
+  const m = state.members;
+  let body;
+  if (!m) body = '<button class="btn" data-act="load-members">הצגת המשתמשים</button>';
+  else if (m.error) body = `<p class="muted">לא הצלחתי לטעון: ${esc(m.error)}</p>`;
+  else {
+    const rows = [...m.list].sort((a, b) => (b.lastLogin || 0) - (a.lastLogin || 0));
+    const fmt = (d) => (d ? d.toLocaleDateString('he-IL') : '—');
+    body = `<p class="muted">${rows.length} משתמשים. מוצגים רק מייל, שם ותאריכים, בלי שום מידע על הלימוד.</p>
+      <div class="members">${rows.map((r) => `<div class="member">
+        <div><b dir="ltr">${esc(r.email)}</b>${r.name ? ` <span class="muted">· ${esc(r.name)}</span>` : ''}</div>
+        <div class="muted small">נרשם: ${fmt(r.createdAt ? new Date(r.createdAt) : null)} · כניסה אחרונה: ${fmt(r.lastLogin)}${r.app === 'android' ? ' · אנדרואיד' : ''}</div>
+      </div>`).join('')}</div>
+      <button class="link" data-act="load-members">רענון</button>`;
+  }
+  return `<section class="card col"><h3>👤 משתמשים רשומים (מנהל)</h3>${body}</section>`;
 }
 
 function exportBackup() {
@@ -902,6 +924,11 @@ $app.addEventListener('click', (e) => {
     }
     case 'goto-today': state.date = state.today; render(); break;
     case 'goto': state.date = el.dataset.date; state.view = 'today'; render(); window.scrollTo(0, 0); break;
+    case 'load-members':
+      state.fb.listMembers()
+        .then((list) => { state.members = { list }; render(); })
+        .catch((e) => { state.members = { error: e.code === 'permission-denied' ? 'אין הרשאה (צריך לעדכן את חוקי האבטחה ב-Firebase)' : e.message }; render(); });
+      break;
     case 'theme':
       localStorage.setItem('limud-theme', el.dataset.theme);
       applyTheme(el.dataset.theme);

@@ -11,3 +11,7 @@ export const firebaseConfig = {
 // מזהה "Web client ID" של גוגל — נחוץ רק לכניסה עם גוגל מתוך אפליקציית האנדרואיד
 // (Firebase → Authentication → Sign-in method → Google → Web SDK configuration → Web client ID)
 export const googleWebClientId = '998596560359-sdins6u0qpe5cj5tvi08ju6q1t689pg9.apps.googleusercontent.com';
+
+// מזהה המשתמש (UID) של מנהל האפליקציה — רק הוא רואה את רשימת המשתמשים שנרשמו
+// (Firebase → Authentication → Users → עמודת User UID). חייב להיות זהה למזהה בחוקי האבטחה של Firestore.
+export const adminUid = '';

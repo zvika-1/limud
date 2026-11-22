@@ -293,3 +293,7 @@ button.cal-day:hover { outline: 2px solid var(--ink-2); outline-offset: 1px; }
 :root[data-compact] .section-title small { font-size: .75rem; font-weight: 500; }
 :root[data-compact] .page-head h2 { font-size: 1.1rem; }
 :root[data-compact] .off-list, :root[data-compact] .past-note { font-size: .8rem; }
+
+.members { display: flex; flex-direction: column; margin: 6px 0; }
+.member { padding: 8px 0; border-top: 1px solid var(--line); }
+.member b { word-break: break-all; }

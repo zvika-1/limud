@@ -168,5 +168,21 @@ export async function initFirebase(config, googleWebClientId) {
     },
     signOut() { return authMod.signOut(auth); },
     storeFor(uid) { return new CloudStore(db, fs, uid); },
+    /** רישום המשתמש ברשימת המשתמשים (רק מייל, שם ותאריכים — בלי שום נתון על הלימוד) */
+    recordMember(user) {
+      const ref = fs.doc(db, 'members', user.uid);
+      fs.setDoc(ref, {
+        email: user.email || '',
+        name: user.displayName || '',
+        createdAt: user.metadata?.creationTime ? new Date(user.metadata.creationTime).toISOString() : '',
+        lastLogin: fs.serverTimestamp(),
+        app: isNative ? 'android' : 'web',
+      }, { merge: true }).catch(() => {});
+    },
+    /** רשימת כל המשתמשים — עובד רק למנהל (לפי חוקי האבטחה) */
+    async listMembers() {
+      const snap = await fs.getDocs(fs.collection(db, 'members'));
+      return snap.docs.map((d) => ({ ...d.data(), lastLogin: d.data().lastLogin?.toDate?.() || null }));
+    },
   };
 }
