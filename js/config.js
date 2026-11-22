@@ -14,4 +14,4 @@ export const googleWebClientId = '998596560359-sdins6u0qpe5cj5tvi08ju6q1t689pg9.
 
 // מזהה המשתמש (UID) של מנהל האפליקציה — רק הוא רואה את רשימת המשתמשים שנרשמו
 // (Firebase → Authentication → Users → עמודת User UID). חייב להיות זהה למזהה בחוקי האבטחה של Firestore.
-export const adminUid = '';
+export const adminUid = 'O1zNmKklxyaD7ysMQIsBUpv390D3';
