@@ -106,6 +106,13 @@ group('תלמוד בבלי', [
     } },
 ]);
 
+group('לימוד יומי לפי התאריך', [
+  { id: 'tehillim-month', name: 'תהילים יומי – חלוקה חודשית', fixed: 'tehillim-month', allDays: true },
+  { id: 'tehillim-week', name: 'תהילים יומי – חלוקה שבועית', fixed: 'tehillim-week', allDays: true },
+  { id: 'ohr-hachaim', name: 'אור החיים על הפרשה (לפי עליות)', fixed: 'ohr-hachaim', allDays: true },
+  { id: 'chok', name: 'חוק לישראל (לפי הפרשה וימי השבוע)', fixed: 'chok', allDays: true },
+]);
+
 group('הלכה', [
   { id: 'sa-oc', name: 'שולחן ערוך אורח חיים', unit: 'siman', parts: [{ name: '', start: 1, end: 697 }] },
   { id: 'sa-yd', name: 'שולחן ערוך יורה דעה', unit: 'siman', parts: [{ name: '', start: 1, end: 403 }] },

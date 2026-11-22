@@ -1,6 +1,7 @@
 // חישוב יחידות הלימוד, המנה היומית והסטטיסטיקה
 
 import { gematria, addDays, weekday, holidayName, todayStr } from './hebrew.js';
+import { fixedLabel } from './fixed.js';
 
 /*
  מבנה "לימוד" (track):
@@ -135,6 +136,12 @@ function calendarIndex(t, ds) {
  */
 export function portionFor(t, ds) {
   if (ds < t.startDate) return null;
+  // לימוד קבוע לפי התאריך (תהילים יומי, אור החיים, חוק לישראל)
+  if (t.fixed) {
+    if (!isLearningDay(t, ds)) return null;
+    const label = fixedLabel(t, ds);
+    return label ? { fixed: true, label, from: 0, count: 1, done: !!t.log?.[ds] } : null;
+  }
   const total = totalUnits(t);
   const logged = t.log?.[ds];
   if (t.mode === 'calendar') {
@@ -151,6 +158,7 @@ export function portionFor(t, ds) {
 
 /** כמה יחידות נלמדו (מתחילת המחזור הנוכחי, כולל נקודת ההתחלה) */
 export function progressPos(t) {
+  if (t.fixed) return Object.keys(t.log || {}).length;
   const total = totalUnits(t);
   if (t.mode === 'calendar') {
     let pos = t.startPos;
@@ -164,12 +172,13 @@ export function progressPos(t) {
 }
 
 export function isFinished(t) {
+  if (t.fixed) return false;
   return progressPos(t) >= totalUnits(t);
 }
 
 /** ימים שהיה בהם לימוד מתוכנן ולא סומנו (רק במצב לוח קבוע), מהחדש לישן */
 export function missedDays(t, today = todayStr(), limit = 60) {
-  if (t.mode !== 'calendar') return [];
+  if (t.mode !== 'calendar' && !t.fixed) return [];
   const out = [];
   for (let d = t.startDate; d < today; d = addDays(d, 1)) {
     const p = portionFor(t, d);
@@ -195,6 +204,7 @@ export function streak(t, today = todayStr()) {
 
 /** תאריך סיום משוער */
 export function estimatedFinish(t, today = todayStr()) {
+  if (t.fixed) return null;
   const total = totalUnits(t);
   if (t.mode === 'calendar') {
     if (t.startPos >= total) return null;
@@ -259,4 +269,9 @@ export function newTrack(fields) {
     createdAt: Date.now(),
     ...fields,
   };
+}
+
+/** הטקסט של מנה (רגילה או קבועה לפי תאריך) */
+export function portionText(t, p) {
+  return p.fixed ? p.label : rangeName(t, p.from, p.count);
 }

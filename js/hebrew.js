@@ -122,3 +122,9 @@ const gregMonthFmt = new Intl.DateTimeFormat('he', { month: 'long', year: 'numer
 export function formatGregMonth(ds) {
   return gregMonthFmt.format(parseDate(ds));
 }
+
+const hebDayFmt = new Intl.DateTimeFormat('en-u-ca-hebrew', { day: 'numeric' });
+/** היום בחודש העברי (1–30) */
+export function hebrewDay(ds) {
+  return Number(hebDayFmt.formatToParts(parseDate(ds)).find((p) => p.type === 'day')?.value);
+}

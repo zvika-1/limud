@@ -6,7 +6,7 @@ import {
   toDateStr, hebrewMonthYear, formatGregMonth,
 } from './hebrew.js';
 import {
-  totalUnits, rangeName, allUnitNames, portionFor, progressPos, isFinished, missedDays, streak,
+  totalUnits, rangeName, portionText, allUnitNames, portionFor, progressPos, isFinished, missedDays, streak,
   estimatedFinish, dayStatus, newTrack, noLearningReason,
 } from './schedule.js';
 
@@ -285,7 +285,7 @@ function todayView() {
 function portionCard(t, p, ds) {
   const key = `${t.id}|${ds}`;
   const total = totalUnits(t);
-  const pct = Math.round((progressPos(t) / total) * 100);
+  const pct = t.fixed ? 0 : Math.round((progressPos(t) / total) * 100);
   let amount = p.count;
   let rangeFrom = p.from;
   if (!p.done && t.mode !== 'calendar' && state.pending[key]) {
@@ -300,8 +300,10 @@ function portionCard(t, p, ds) {
   return `<div class="card portion ${p.done ? 'done' : ''}">
     <div class="info">
       <div class="tname">${esc(t.name)}</div>
-      <div class="range">${esc(rangeName(t, rangeFrom, amount))}</div>
-      <div class="mini"><div class="bar thin"><div style="width:${pct}%"></div></div><span>${pct}%</span></div>
+      <div class="range">${esc(p.fixed ? p.label : rangeName(t, rangeFrom, amount))}</div>
+      ${t.fixed
+        ? `<div class="mini">🔥 רצף: ${streak(t, state.today)} · ימים שלמדת: ${progressPos(t)}</div>`
+        : `<div class="mini"><div class="bar thin"><div style="width:${pct}%"></div></div><span>${pct}%</span></div>`}
     </div>
     <div class="actions">
       ${stepper}
@@ -327,7 +329,7 @@ function missedSection(tracks) {
       const p = portionFor(t, d);
       return `<div class="missed-row">
         <button class="link" data-act="goto" data-date="${d}">${formatShort(d)}</button>
-        <span class="grow"><b>${esc(t.name)}</b>: ${esc(rangeName(t, p.from, p.count))}</span>
+        <span class="grow"><b>${esc(t.name)}</b>: ${esc(portionText(t, p))}</span>
         <button class="btn small" data-act="mark-past" data-id="${t.id}" data-date="${d}">✓ למדתי</button>
       </div>`;
     }).join('')}
@@ -350,9 +352,12 @@ function booksView() {
       return `<div class="card book">
         <div class="info">
           <div class="tname">${esc(t.name)}</div>
-          <div class="meta">${amountText(t, t.perDay)} ביום · ${t.mode === 'calendar' ? 'לוח קבוע' : 'לפי הקצב שלי'} · ${days}</div>
+          ${t.fixed
+            ? `<div class="meta">לימוד קבוע לפי התאריך · ${days}</div>
+               <div class="mini">ימים שלמדת: ${pos}</div>`
+            : `<div class="meta">${amountText(t, t.perDay)} ביום · ${t.mode === 'calendar' ? 'לוח קבוע' : 'לפי הקצב שלי'} · ${days}</div>
           <div class="mini"><div class="bar thin"><div style="width:${(pos / total) * 100}%"></div></div>
-            <span>${pos}/${total}</span></div>
+            <span>${pos}/${total}</span></div>`}
         </div>
         <div class="actions row">
           <button class="btn small" data-act="edit" data-id="${t.id}">עריכה</button>
@@ -430,6 +435,7 @@ function editView() {
   const presetOptions = PRESETS.map((g) => `<optgroup label="${esc(g.title)}">${g.items
     .map((it) => `<option value="${esc(it.id)}" ${it.id === d.presetId ? 'selected' : ''}>${esc(it.name)}</option>`)
     .join('')}</optgroup>`).join('');
+  if (d.fixed) return fixedFormView(d, presetOptions);
 
   return `<div class="page-head"><h2>${d._isNew ? 'הוספת ספר / לימוד' : 'עריכת ' + esc(d.name)}</h2></div>
   <form class="form" id="track-form" autocomplete="off">
@@ -517,11 +523,63 @@ function editView() {
   </form>`;
 }
 
+const FIXED_HELP = {
+  'tehillim-month': 'כל יום לפי היום בחודש העברי (א׳: פרקים א׳–ט׳ … ל׳: פרקים קמ״ה–ק״נ). בחודש של 29 יום, ביום כ״ט אומרים גם את של ל׳.',
+  'tehillim-week': 'כל יום לפי היום בשבוע: ראשון א׳–כ״ט, שני ל׳–נ׳, שלישי נ״א–ע״ב, רביעי ע״ג–פ״ט, חמישי צ׳–ק״ו, שישי ק״ז–קי״ט, שבת ק״כ–ק״נ.',
+  'ohr-hachaim': 'כל יום עליה אחת מפרשת השבוע: ראשון בראשון, שני בשני … ושביעי בשבת. בשבוע שהשבת שלו חג, לומדים את הפרשה הבאה.',
+  chok: 'כל יום לפי פרשת השבוע ויום השבוע, כמו שמסודר בספר חוק לישראל (ראשון עד שבת קודש). התורה של כל יום היא העליה של אותו יום.',
+};
+
+function fixedFormView(d, presetOptions) {
+  const usesParsha = d.fixed === 'ohr-hachaim' || d.fixed === 'chok';
+  return `<div class="page-head"><h2>${d._isNew ? 'הוספת ספר / לימוד' : 'עריכת ' + esc(d.name)}</h2></div>
+  <form class="form" id="track-form" autocomplete="off">
+    <label class="field"><span>בחירת ספר</span>
+      <select data-field="presetId"><option value="">✏️ ספר אחר (הגדרה ידנית)</option>${presetOptions}</select></label>
+    <p class="muted">${esc(FIXED_HELP[d.fixed] || '')}</p>
+    <label class="field"><span>שם הלימוד</span>
+      <input type="text" data-field="name" value="${esc(d.name)}" required></label>
+    ${usesParsha ? `<label class="field narrow"><span>פרשות השבוע לפי</span>
+      <select data-field="region">
+        <option value="israel" ${d.region !== 'diaspora' ? 'selected' : ''}>ארץ ישראל</option>
+        <option value="diaspora" ${d.region === 'diaspora' ? 'selected' : ''}>חוץ לארץ</option>
+      </select></label>` : ''}
+    <label class="field narrow"><span>תאריך התחלה</span>
+      <input type="date" data-field="startDate" value="${d.startDate}"></label>
+    <fieldset class="field">
+      <legend>ימי לימוד</legend>
+      <div class="days">
+        ${WEEKDAY_NAMES.map((n, i) => `<label class="day-chip"><input type="checkbox" data-field="day" data-day="${i}" ${d.days[i] ? 'checked' : ''}><span>${n}</span></label>`).join('')}
+      </div>
+      <label class="field narrow"><span>חגים</span>
+        <select data-field="holidays">
+          <option value="none" ${d.holidays === 'none' ? 'selected' : ''}>לומדים גם בחגים</option>
+          <option value="israel" ${d.holidays === 'israel' ? 'selected' : ''}>לא לומדים בחגים (ארץ ישראל)</option>
+          <option value="diaspora" ${d.holidays === 'diaspora' ? 'selected' : ''}>לא לומדים בחגים (חוץ לארץ)</option>
+        </select></label>
+    </fieldset>
+    <div class="form-actions">
+      <button type="submit" class="btn primary">שמירה</button>
+      <button type="button" class="btn" data-act="cancel-edit">ביטול</button>
+    </div>
+  </form>`;
+}
+
 function applyPreset(d, id) {
   d.presetId = id;
   d.startPos = 0;
   d.amud = false;
   const p = findPreset(id);
+  delete d.fixed;
+  if (p?.fixed) {
+    Object.assign(d, {
+      name: p.name, fixed: p.fixed, mode: 'calendar', parts: [], unitType: 'other', unitLabel: 'יום', unitPlural: 'ימים',
+      perDay: 1, days: [true, true, true, true, true, true, true], holidays: 'none', region: d.region || 'israel',
+    });
+    delete d.picked;
+    return;
+  }
+  if (d.parts.length === 0) d.parts = [{ name: '', start: 1, end: 10 }];
   if (!p) {
     d.unitType = 'perek';
     Object.assign(d, { unitLabel: 'פרק', unitPlural: 'פרקים', hebNums: true, parts: [{ name: '', start: 1, end: 10 }] });
@@ -582,13 +640,14 @@ function updateDraftField(el) {
     case 'startPos': d.startPos = parseInt(v, 10) || 0; return false;
     case 'day': d.days[Number(el.dataset.day)] = el.checked; return false;
     case 'holidays': d.holidays = v; return false;
+    case 'region': d.region = v; return false;
     default: return false;
   }
 }
 
 async function saveDraft() {
   const d = state.draft;
-  if (!d.parts.length) return toast('צריך לבחור לפחות ספר או מסכת אחת');
+  if (!d.fixed && !d.parts.length) return toast('צריך לבחור לפחות ספר או מסכת אחת');
   if (!d.name.trim()) return toast('צריך לתת שם ללימוד');
   if (!d.unitLabel.trim()) return toast('צריך לכתוב את שם יחידת הלימוד');
   if (d.parts.some((p) => p.end < p.start)) return toast('מספר הסיום קטן ממספר ההתחלה');
@@ -635,7 +694,7 @@ function statsView() {
   for (const t of tracks) {
     const total = totalUnits(t);
     const pos = progressPos(t);
-    const pct = Math.round((pos / total) * 100);
+    const pct = t.fixed ? 0 : Math.round((pos / total) * 100);
     const fin = estimatedFinish(t, state.today);
     const missed = missedDays(t, state.today, 100000).length;
     const daysLearned = Object.keys(t.log || {}).length;
@@ -644,17 +703,17 @@ function statsView() {
     const compact = isCompact();
     const open = !compact || state.openStats.has(t.id);
     const head = `<div class="tname">${esc(t.name)}</div>
-      <div class="mini"><div class="bar"><div style="width:${pct}%"></div></div><span><b>${pct}%</b></span></div>`;
+      ${t.fixed ? '<div class="mini">לימוד קבוע לפי התאריך</div>' : `<div class="mini"><div class="bar"><div style="width:${pct}%"></div></div><span><b>${pct}%</b></span></div>`}`;
     html += `<div class="card stat ${compact ? 'collapsible' : ''}">
       ${compact
         ? `<button class="stat-head" data-act="stat-toggle" data-id="${t.id}" aria-expanded="${open}">${head}<span class="chev">${open ? '▲' : '▼'}</span></button>`
         : head}
       ${open ? `<div class="stat-grid">
-        <div><b>${pos}</b> מתוך ${total} ${esc(unitsWord)}</div>
+        ${t.fixed ? '' : `<div><b>${pos}</b> מתוך ${total} ${esc(unitsWord)}</div>`}
         <div>🔥 רצף: <b>${st}</b> ${st === 1 ? 'יום' : 'ימים'}</div>
         <div>📅 ימים שלמדת: <b>${daysLearned}</b></div>
-        <div>${pos >= total ? '🎉 הושלם' : fin ? `🏁 סיום משוער: <b>${formatGreg(fin)}</b>` : ''}</div>
-        ${t.mode === 'calendar' ? `<div>${missed ? `⚠️ ימים שלא סומנו: <b>${missed}</b>` : '✓ אין ימים חסרים'}</div>` : ''}
+        <div>${t.fixed ? '' : pos >= total ? '🎉 הושלם' : fin ? `🏁 סיום משוער: <b>${formatGreg(fin)}</b>` : ''}</div>
+        ${t.mode === 'calendar' || t.fixed ? `<div>${missed ? `⚠️ ימים שלא סומנו: <b>${missed}</b>` : '✓ אין ימים חסרים'}</div>` : ''}
         ${t.cycles ? `<div>🔁 מחזורים שהושלמו: <b>${t.cycles}</b></div>` : ''}
       </div>` : ''}
     </div>`;

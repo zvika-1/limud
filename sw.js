@@ -1,8 +1,8 @@
 // Service worker: מאפשר לאפליקציה להיפתח מהר וגם בלי אינטרנט
-const CACHE = 'limud-v11';
+const CACHE = 'limud-v12';
 const FILES = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
-  'js/app.js', 'js/books.js', 'js/config.js', 'js/hebrew.js', 'js/schedule.js', 'js/store.js',
+  'js/app.js', 'js/books.js', 'js/config.js', 'js/hebrew.js', 'js/schedule.js', 'js/store.js', 'js/fixed.js', 'js/parsha-data.js',
   'vendor/firebase/firebase-app.js', 'vendor/firebase/firebase-auth.js', 'vendor/firebase/firebase-firestore.js',
 ];
 
