@@ -116,6 +116,10 @@ async function start() {
   // מעבר יום בחצות
   setInterval(checkNewDay, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
+  // מספר הגרסה של אפליקציית האנדרואיד (נכתב בזמן הבנייה ב-GitHub)
+  if (isNative) {
+    fetch('version.txt').then((r) => (r.ok ? r.text() : '')).then((v) => { state.appVersion = v.trim(); }).catch(() => {});
+  }
   if (!isNative && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
@@ -764,6 +768,7 @@ function settingsView() {
   </section>
   <section class="card col">
     <h3>התקנה בטלפון</h3>
+    ${state.appVersion ? `<p>גרסת האפליקציה המותקנת: <b>${esc(state.appVersion)}</b></p>` : ''}
     <p><b>אנדרואיד (Chrome):</b> תפריט ⋮ ← "הוספה למסך הבית" / "התקנת אפליקציה".</p>
     <p><b>אייפון (Safari):</b> כפתור השיתוף ⬆️ ← "הוסף למסך הבית".</p>
   </section>`;
