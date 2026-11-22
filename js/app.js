@@ -31,6 +31,7 @@ const state = {
   pending: {}, // כמות שנבחרה לפני סימון: { 'id|date': n }
   showMissed: false,
   calStart: null, // החודש הראשון שמוצג בלוח (YYYY-MM-01)
+  openStats: new Set(), // ספרים שפתוחים בסטטיסטיקה בתצוגה מוקטנת
 };
 
 // ---------------- ערכות צבע ----------------
@@ -55,6 +56,14 @@ function applyTheme(id) {
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', th[3]);
 }
 applyTheme(currentTheme());
+
+// תצוגה מוקטנת (למסכים קטנים)
+const isCompact = () => localStorage.getItem('limud-compact') === '1';
+function applyCompact() {
+  if (isCompact()) document.documentElement.dataset.compact = '1';
+  else delete document.documentElement.dataset.compact;
+}
+applyCompact();
 
 // ---------------- עזרים ----------------
 
@@ -620,7 +629,7 @@ function statsView() {
     <div class="tile"><div class="tile-num">${finishedCount + tracks.reduce((s, t) => s + (t.cycles || 0), 0)}</div><div class="tile-label">סיומים</div></div>
   </div>
   ${calendarView(tracks)}
-  <h3 class="section-title">לפי ספר</h3>
+  <h3 class="section-title">לפי ספר${isCompact() ? ' <small class="muted">(לחיצה על ספר מציגה את הפרטים)</small>' : ''}</h3>
   <div class="cards">`;
 
   for (const t of tracks) {
@@ -632,17 +641,22 @@ function statsView() {
     const daysLearned = Object.keys(t.log || {}).length;
     const st = streak(t, state.today);
     const unitsWord = t.amud ? 'עמודים' : (t.unitPlural || t.unitLabel);
-    html += `<div class="card stat">
-      <div class="tname">${esc(t.name)}</div>
-      <div class="mini"><div class="bar"><div style="width:${pct}%"></div></div><span><b>${pct}%</b></span></div>
-      <div class="stat-grid">
+    const compact = isCompact();
+    const open = !compact || state.openStats.has(t.id);
+    const head = `<div class="tname">${esc(t.name)}</div>
+      <div class="mini"><div class="bar"><div style="width:${pct}%"></div></div><span><b>${pct}%</b></span></div>`;
+    html += `<div class="card stat ${compact ? 'collapsible' : ''}">
+      ${compact
+        ? `<button class="stat-head" data-act="stat-toggle" data-id="${t.id}" aria-expanded="${open}">${head}<span class="chev">${open ? '▲' : '▼'}</span></button>`
+        : head}
+      ${open ? `<div class="stat-grid">
         <div><b>${pos}</b> מתוך ${total} ${esc(unitsWord)}</div>
         <div>🔥 רצף: <b>${st}</b> ${st === 1 ? 'יום' : 'ימים'}</div>
         <div>📅 ימים שלמדת: <b>${daysLearned}</b></div>
         <div>${pos >= total ? '🎉 הושלם' : fin ? `🏁 סיום משוער: <b>${formatGreg(fin)}</b>` : ''}</div>
         ${t.mode === 'calendar' ? `<div>${missed ? `⚠️ ימים שלא סומנו: <b>${missed}</b>` : '✓ אין ימים חסרים'}</div>` : ''}
         ${t.cycles ? `<div>🔁 מחזורים שהושלמו: <b>${t.cycles}</b></div>` : ''}
-      </div>
+      </div>` : ''}
     </div>`;
   }
   html += '</div>';
@@ -710,11 +724,11 @@ function calendarView(tracks) {
     <div class="cal-head">
       <button class="icon-btn" data-act="cal" data-delta="-1" ${ms <= first ? 'disabled' : ''} title="חודשים קודמים" aria-label="חודשים קודמים">→</button>
       <h3 class="section-title" style="margin:8px 0">לוח מעקב</h3>
-      <button class="icon-btn" data-act="cal" data-delta="1" ${ms >= cur ? 'disabled' : ''} title="חודשים הבאים" aria-label="חודשים הבאים">←</button>
+      <button class="icon-btn" data-act="cal" data-delta="1" ${ms >= (isCompact() ? addMonths(cur, 1) : cur) ? 'disabled' : ''} title="חודשים הבאים" aria-label="חודשים הבאים">←</button>
     </div>
     <div class="cal-months">
       ${monthView(tracks, ms, signup)}
-      ${monthView(tracks, addMonths(ms, 1), signup)}
+      ${isCompact() ? '' : monthView(tracks, addMonths(ms, 1), signup)}
     </div>
     <div class="legend">
       <span><i class="cal-day done"></i>הושלם</span>
@@ -756,6 +770,11 @@ function settingsView() {
       ${THEMES.map(([id, name, c1, c2]) => `<button class="theme-btn ${currentTheme() === id ? 'active' : ''}" data-act="theme" data-theme="${id}">
         <i style="background:linear-gradient(135deg, ${c2} 50%, ${c1} 50%)"></i>${name}</button>`).join('')}
     </div>
+  </section>
+  <section class="card col">
+    <h3>תצוגה</h3>
+    <label class="check-field"><input type="checkbox" data-act-change="compact" ${isCompact() ? 'checked' : ''}>
+      <span><b>תצוגה מוקטנת</b>: כתב וכפתורים קטנים יותר, ולוח מעקב של חודש אחד, כדי שיותר ייכנס במסך.</span></label>
   </section>
   <section class="card col">
     <h3>גיבוי</h3>
@@ -829,6 +848,10 @@ $app.addEventListener('click', (e) => {
       applyTheme(el.dataset.theme);
       render();
       break;
+    case 'stat-toggle':
+      if (state.openStats.has(id)) state.openStats.delete(id); else state.openStats.add(id);
+      render();
+      break;
     case 'cal':
       state.calStart = addMonths(state.calStart, Number(el.dataset.delta));
       render();
@@ -899,6 +922,13 @@ $app.addEventListener('input', (e) => {
 
 $app.addEventListener('change', (e) => {
   const el = e.target;
+  if (el.dataset.actChange === 'compact') {
+    localStorage.setItem('limud-compact', el.checked ? '1' : '0');
+    applyCompact();
+    state.calStart = null;
+    render();
+    return;
+  }
   if (el.id === 'import-file' && el.files[0]) {
     safe(() => importBackup(el.files[0]));
     el.value = '';

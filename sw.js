@@ -1,5 +1,5 @@
 // Service worker: מאפשר לאפליקציה להיפתח מהר וגם בלי אינטרנט
-const CACHE = 'limud-v10';
+const CACHE = 'limud-v11';
 const FILES = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
   'js/app.js', 'js/books.js', 'js/config.js', 'js/hebrew.js', 'js/schedule.js', 'js/store.js',

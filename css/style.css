@@ -253,3 +253,43 @@ button.cal-day:hover { outline: 2px solid var(--ink-2); outline-offset: 1px; }
   .tile-num { font-size: 1.4rem; }
   .stat-grid { grid-template-columns: 1fr; }
 }
+
+/* ---- תצוגה מוקטנת ---- */
+.stat-head { all: unset; display: block; width: 100%; cursor: pointer; position: relative; padding-left: 22px; box-sizing: border-box; }
+.stat-head .chev { position: absolute; left: 0; top: 2px; font-size: .7rem; color: var(--muted); }
+.stat-head:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 6px; }
+:root[data-compact] body { font-size: 14px; }
+:root[data-compact] main { padding: 8px 10px 16px; }
+:root[data-compact] .topbar { padding: 8px 12px; }
+:root[data-compact] .topbar h1 { font-size: 1rem; }
+:root[data-compact] .avatar { width: 26px; height: 26px; }
+:root[data-compact] .daybar { margin: 0 0 8px; }
+:root[data-compact] .daybar-title strong { font-size: 1rem; }
+:root[data-compact] .daybar-title span { font-size: .8rem; }
+:root[data-compact] .icon-btn { width: 34px; height: 34px; font-size: 1rem; }
+:root[data-compact] .summary { padding: 6px 10px; margin-bottom: 8px; font-size: .9rem; }
+:root[data-compact] .cards { gap: 6px; }
+:root[data-compact] .card { padding: 8px 10px; gap: 8px; border-radius: 10px; }
+:root[data-compact] .tname { font-size: .92rem; }
+:root[data-compact] .range { font-size: .95rem; }
+:root[data-compact] .mini { margin-top: 3px; font-size: .72rem; }
+:root[data-compact] .card.portion { flex-direction: row; align-items: center; }
+:root[data-compact] .card.portion .actions { flex-direction: column; align-items: stretch; gap: 4px; }
+:root[data-compact] .check { min-width: 84px; min-height: 34px; border-radius: 9px; font-size: .85rem; border-width: 1.5px; }
+:root[data-compact] .stepper { font-size: .75rem; gap: 2px; }
+:root[data-compact] .stepper button { width: 24px; height: 24px; font-size: .85rem; }
+:root[data-compact] .tabs .tab { padding: 5px 4px 6px; font-size: .72rem; }
+:root[data-compact] .tab-icon { font-size: 1.05rem; }
+:root[data-compact] #app { padding-bottom: 64px; }
+:root[data-compact] .tiles { gap: 6px; }
+:root[data-compact] .tile { padding: 8px; }
+:root[data-compact] .tile-num { font-size: 1.25rem; }
+:root[data-compact] .tile-label { font-size: .72rem; }
+:root[data-compact] .cal-box { padding: 4px 10px 10px; }
+:root[data-compact] .cal-months { max-width: 290px; margin: 0 auto; }
+:root[data-compact] .cal-grid { gap: 3px; }
+:root[data-compact] .cal-day { font-size: .75rem; border-radius: 6px; }
+:root[data-compact] .section-title { margin: 14px 0 6px; font-size: .95rem; }
+:root[data-compact] .section-title small { font-size: .75rem; font-weight: 500; }
+:root[data-compact] .page-head h2 { font-size: 1.1rem; }
+:root[data-compact] .off-list, :root[data-compact] .past-note { font-size: .8rem; }
