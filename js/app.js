@@ -3,6 +3,7 @@ import { LocalStore, initFirebase, isNative, authErrorText } from './store.js';
 import { PRESETS, UNIT_TYPES, findPreset, pickAll, pickParts, migratePresetId } from './books.js';
 import {
   todayStr, addDays, formatGreg, formatHebrew, formatShort, weekday, WEEKDAY_NAMES, WEEKDAY_SHORT,
+  toDateStr, hebrewMonthYear, formatGregMonth,
 } from './hebrew.js';
 import {
   totalUnits, rangeName, allUnitNames, portionFor, progressPos, isFinished, missedDays, streak,
@@ -29,7 +30,31 @@ const state = {
   draft: null,
   pending: {}, // כמות שנבחרה לפני סימון: { 'id|date': n }
   showMissed: false,
+  calStart: null, // החודש הראשון שמוצג בלוח (YYYY-MM-01)
 };
+
+// ---------------- ערכות צבע ----------------
+
+const THEMES = [
+  ['blue', 'כחול בהיר', '#2f6fb5', '#dcebfa'],
+  ['sky', 'תכלת', '#127a97', '#d4f0f7'],
+  ['green', 'ירוק בהיר', '#2a7f50', '#d9f1e1'],
+  ['purple', 'סגול בהיר', '#7556c0', '#ebe3fa'],
+  ['red', 'אדום בהיר', '#c4443b', '#fbe1de'],
+  ['pink', 'ורוד בהיר', '#bd447c', '#fae0ed'],
+];
+
+function currentTheme() {
+  return localStorage.getItem('limud-theme') || 'blue';
+}
+
+function applyTheme(id) {
+  const th = THEMES.find((x) => x[0] === id) || THEMES[0];
+  if (th[0] === 'blue') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = th[0];
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', th[3]);
+}
+applyTheme(currentTheme());
 
 // ---------------- עזרים ----------------
 
@@ -590,7 +615,7 @@ function statsView() {
     <div class="tile"><div class="tile-num">${tracks.length - finishedCount}</div><div class="tile-label">לימודים פעילים</div></div>
     <div class="tile"><div class="tile-num">${finishedCount + tracks.reduce((s, t) => s + (t.cycles || 0), 0)}</div><div class="tile-label">סיומים</div></div>
   </div>
-  ${heatmap(tracks)}
+  ${calendarView(tracks)}
   <h3 class="section-title">לפי ספר</h3>
   <div class="cards">`;
 
@@ -620,43 +645,82 @@ function statsView() {
   return html;
 }
 
-function heatmap(tracks) {
-  const WEEKS = 16;
-  // מתחילים מיום ראשון לפני 15 שבועות
-  const endSunday = addDays(state.today, -weekday(state.today));
-  const start = addDays(endSunday, -7 * (WEEKS - 1));
-  let cols = '';
-  for (let w = 0; w < WEEKS; w++) {
-    let cells = '';
-    for (let dIdx = 0; dIdx < 7; dIdx++) {
-      const ds = addDays(start, w * 7 + dIdx);
-      if (ds > state.today) { cells += '<span class="cell future"></span>'; continue; }
-      const s = dayStatus(tracks, ds);
-      let cls = 'none';
-      let tip = 'אין לימוד מתוכנן';
-      if (s.due) {
-        const r = s.done / s.due;
-        cls = r === 1 ? 'l3' : r >= 0.5 ? 'l2' : r > 0 ? 'l1' : 'l0';
-        tip = `סומנו ${s.done} מתוך ${s.due}`;
-      }
-      cells += `<button class="cell ${cls}" data-act="goto" data-date="${ds}" title="${formatShort(ds)}: ${tip}" aria-label="${formatShort(ds)}: ${tip}"></button>`;
-    }
-    cols += `<div class="hm-col">${cells}</div>`;
+const monthStart = (ds) => ds.slice(0, 8) + '01';
+function addMonths(ms, n) {
+  const [y, m] = ms.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1, 12);
+  return toDateStr(d);
+}
+
+/** היום שבו המשתמש נרשם (או הספר הראשון שהוסיף) — מכאן מתחיל הלוח */
+function signupDate(tracks) {
+  const created = state.user?.metadata?.creationTime;
+  let d = created ? toDateStr(new Date(created)) : null;
+  for (const t of tracks) {
+    const c = t.createdAt ? toDateStr(new Date(t.createdAt)) : null;
+    if (c && (!d || c < d)) d = c;
   }
-  return `<section class="heatmap-box">
-    <h3 class="section-title">16 השבועות האחרונים</h3>
-    <div class="heatmap">
-      <div class="hm-col hm-labels">${WEEKDAY_SHORT.map((n) => `<span>${n}</span>`).join('')}</div>
-      ${cols}
+  return d && d < state.today ? d : state.today;
+}
+
+function dayClass(tracks, ds, signup) {
+  if (ds < signup) return ['before', ''];
+  const s = dayStatus(tracks, ds);
+  const future = ds > state.today;
+  if (!s.due) return [future ? 'future' : 'off', 'אין לימוד מתוכנן'];
+  if (future && !s.done) return ['future', 'יום עתידי'];
+  if (ds === state.today && !s.done) return ['future', 'עוד לא סומן היום'];
+  const r = s.done / s.due;
+  const cls = r === 1 ? 'done' : r >= 0.5 ? 'most' : r > 0 ? 'partial' : 'missed';
+  return [cls, `סומנו ${s.done} מתוך ${s.due}`];
+}
+
+function monthView(tracks, ms, signup) {
+  const { month: hm1, year: hy1 } = hebrewMonthYear(ms);
+  const last = addDays(addMonths(ms, 1), -1);
+  const { month: hm2, year: hy2 } = hebrewMonthYear(last);
+  const hebTitle = hy1 === hy2 ? `${hm1 === hm2 ? hm1 : `${hm1}–${hm2}`} ${hy1}` : `${hm1} ${hy1} – ${hm2} ${hy2}`;
+  const maxClick = addDays(state.today, 30);
+  let cells = WEEKDAY_SHORT.map((n) => `<span class="cal-wd">${n}</span>`).join('');
+  for (let i = 0; i < weekday(ms); i++) cells += '<span class="cal-day blank"></span>';
+  for (let ds = ms; ds <= last; ds = addDays(ds, 1)) {
+    const [cls, tip] = dayClass(tracks, ds, signup);
+    const day = Number(ds.slice(8));
+    const today = ds === state.today ? ' today' : '';
+    const label = `${formatShort(ds)} · ${formatHebrew(ds)}${tip ? ': ' + tip : ''}`;
+    cells += cls === 'before' || ds > maxClick
+      ? `<span class="cal-day ${cls}${today}" title="${esc(label)}">${day}</span>`
+      : `<button class="cal-day ${cls}${today}" data-act="goto" data-date="${ds}" title="${esc(label)}" aria-label="${esc(label)}">${day}</button>`;
+  }
+  return `<div class="cal-month"><h4>${formatGregMonth(ms)}<small>${esc(hebTitle)}</small></h4>
+    <div class="cal-grid">${cells}</div></div>`;
+}
+
+function calendarView(tracks) {
+  const signup = signupDate(tracks);
+  const first = monthStart(signup);
+  const cur = monthStart(state.today);
+  if (!state.calStart) state.calStart = cur;
+  const ms = state.calStart;
+  return `<section class="cal-box">
+    <div class="cal-head">
+      <button class="icon-btn" data-act="cal" data-delta="-1" ${ms <= first ? 'disabled' : ''} title="חודשים קודמים" aria-label="חודשים קודמים">→</button>
+      <h3 class="section-title" style="margin:8px 0">לוח מעקב</h3>
+      <button class="icon-btn" data-act="cal" data-delta="1" ${ms >= cur ? 'disabled' : ''} title="חודשים הבאים" aria-label="חודשים הבאים">←</button>
+    </div>
+    <div class="cal-months">
+      ${monthView(tracks, ms, signup)}
+      ${monthView(tracks, addMonths(ms, 1), signup)}
     </div>
     <div class="legend">
-      <span><i class="cell l0"></i>לא סומן</span>
-      <span><i class="cell l1"></i>חלקי</span>
-      <span><i class="cell l2"></i>רוב</span>
-      <span><i class="cell l3"></i>הכול</span>
-      <span><i class="cell none"></i>אין לימוד</span>
+      <span><i class="cal-day done"></i>הושלם</span>
+      <span><i class="cal-day most"></i>רוב</span>
+      <span><i class="cal-day partial"></i>חלקי</span>
+      <span><i class="cal-day missed"></i>לא סומן</span>
+      <span><i class="cal-day future"></i>עתידי</span>
+      <span><i class="cal-day off"></i>אין לימוד</span>
     </div>
-    <p class="muted small">לחיצה על משבצת פותחת את היום הזה לסימון.</p>
+    <p class="muted small">לחיצה על יום פותחת אותו לסימון (עד חודש קדימה).</p>
   </section>`;
 }
 
@@ -682,6 +746,13 @@ function settingsView() {
       <button type="submit" class="btn primary">${state.fb.hasPassword() ? 'שינוי סיסמה' : 'קביעת סיסמה'}</button>
     </form>
   </section>`}
+  <section class="card col">
+    <h3>צבע האפליקציה</h3>
+    <div class="themes">
+      ${THEMES.map(([id, name, c1, c2]) => `<button class="theme-btn ${currentTheme() === id ? 'active' : ''}" data-act="theme" data-theme="${id}">
+        <i style="background:linear-gradient(135deg, ${c2} 50%, ${c1} 50%)"></i>${name}</button>`).join('')}
+    </div>
+  </section>
   <section class="card col">
     <h3>גיבוי</h3>
     <p class="muted">שמירת כל הספרים והסימונים לקובץ במחשב או בטלפון, ושחזור מקובץ כזה.</p>
@@ -748,6 +819,15 @@ $app.addEventListener('click', (e) => {
     }
     case 'goto-today': state.date = state.today; render(); break;
     case 'goto': state.date = el.dataset.date; state.view = 'today'; render(); window.scrollTo(0, 0); break;
+    case 'theme':
+      localStorage.setItem('limud-theme', el.dataset.theme);
+      applyTheme(el.dataset.theme);
+      render();
+      break;
+    case 'cal':
+      state.calStart = addMonths(state.calStart, Number(el.dataset.delta));
+      render();
+      break;
     case 'toggle-missed': state.showMissed = !state.showMissed; render(); break;
     case 'toggle': {
       const p = portionFor(t, state.date);

@@ -103,3 +103,22 @@ export function holidayName(ds, region) {
   }
   return HOLIDAYS_ISRAEL[key] || (region === 'diaspora' ? HOLIDAYS_DIASPORA_EXTRA[key] : null) || null;
 }
+
+const hebMonthFmt = new Intl.DateTimeFormat('he-u-ca-hebrew', { month: 'long', year: 'numeric' });
+
+/** שם החודש העברי והשנה, למשל: כסלו תשפ״ז */
+export function hebrewMonthYear(ds) {
+  try {
+    const parts = hebMonthFmt.formatToParts(parseDate(ds));
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const year = Number(parts.find((p) => p.type === 'year')?.value);
+    return { month, year: gematria(year % 1000) };
+  } catch {
+    return { month: '', year: '' };
+  }
+}
+
+const gregMonthFmt = new Intl.DateTimeFormat('he', { month: 'long', year: 'numeric' });
+export function formatGregMonth(ds) {
+  return gregMonthFmt.format(parseDate(ds));
+}
