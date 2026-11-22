@@ -49,23 +49,29 @@ export class CloudStore {
     this.col = fs.collection(db, 'users', uid, 'tracks');
   }
   subscribe(cb, onError) {
+    this.onWriteError = (e) => onError?.(e);
     return this.fs.onSnapshot(
       this.col,
       (snap) => cb(snap.docs.map((d) => d.data())),
       (err) => onError?.(err),
     );
   }
-  async saveTrack(t) { await this.fs.setDoc(this.fs.doc(this.col, t.id), t); }
-  async deleteTrack(id) { await this.fs.deleteDoc(this.fs.doc(this.col, id)); }
+  // כתיבה לענן: Firestore שומר מיד במכשיר ומעדכן את המסך, ושולח לשרת כשיש חיבור.
+  // לא מחכים לאישור מהשרת — אחרת בלי אינטרנט הכפתורים "נתקעים" עד שהחיבור חוזר.
+  _bg(promise) {
+    promise.catch((e) => this.onWriteError?.(e));
+  }
+  async saveTrack(t) { this._bg(this.fs.setDoc(this.fs.doc(this.col, t.id), t)); }
+  async deleteTrack(id) { this._bg(this.fs.deleteDoc(this.fs.doc(this.col, id))); }
   async setLog(id, ds, amount) {
-    await this.fs.updateDoc(this.fs.doc(this.col, id), `log.${ds}`, amount ? amount : this.fs.deleteField());
+    this._bg(this.fs.updateDoc(this.fs.doc(this.col, id), `log.${ds}`, amount ? amount : this.fs.deleteField()));
   }
   async replaceAll(tracks) {
     const snap = await this.fs.getDocs(this.col);
     const batch = this.fs.writeBatch(this.db);
     snap.docs.forEach((d) => batch.delete(d.ref));
     tracks.forEach((t) => batch.set(this.fs.doc(this.col, t.id), t));
-    await batch.commit();
+    this._bg(batch.commit());
   }
 }
 
