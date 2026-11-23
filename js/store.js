@@ -26,12 +26,16 @@ export class LocalStore {
   }
   async saveTrack(t) { const all = this._read(); all[t.id] = t; this._write(all); }
   async deleteTrack(id) { const all = this._read(); delete all[id]; this._write(all); }
-  async setLog(id, ds, amount) {
+  async setLog(id, ds, amount, markTime) {
     const all = this._read();
     const t = all[id];
     if (!t) return;
     t.log = t.log || {};
     if (amount) t.log[ds] = amount; else delete t.log[ds];
+    if (markTime !== undefined) {
+      t.markedAt = t.markedAt || {};
+      if (markTime) t.markedAt[ds] = markTime; else delete t.markedAt[ds];
+    }
     this._write(all);
   }
   async replaceAll(tracks) {
@@ -63,8 +67,12 @@ export class CloudStore {
   }
   async saveTrack(t) { this._bg(this.fs.setDoc(this.fs.doc(this.col, t.id), t)); }
   async deleteTrack(id) { this._bg(this.fs.deleteDoc(this.fs.doc(this.col, id))); }
-  async setLog(id, ds, amount) {
-    this._bg(this.fs.updateDoc(this.fs.doc(this.col, id), `log.${ds}`, amount ? amount : this.fs.deleteField()));
+  // markTime: שעת הסימון (לסידור הרשימה לפי ההרגל). undefined = לא לשנות, null = למחוק
+  async setLog(id, ds, amount, markTime) {
+    const del = this.fs.deleteField();
+    const args = [`log.${ds}`, amount || del];
+    if (markTime !== undefined) args.push(`markedAt.${ds}`, markTime || del);
+    this._bg(this.fs.updateDoc(this.fs.doc(this.col, id), ...args));
   }
   async replaceAll(tracks) {
     const snap = await this.fs.getDocs(this.col);

@@ -236,6 +236,11 @@ function todayView() {
     else off.push(t);
   }
   const doneCount = active.filter(([, p]) => p.done).length;
+  // סדר: קודם מה שעוד לא סומן, אחר כך מה שסומן. בתוך כל קבוצה — לפי מה שבדרך כלל מסמנים ראשון
+  const habit = habitRank(tracks);
+  const pos = new Map(tracks.map((t, i) => [t.id, i]));
+  const score = (t) => (habit.has(t.id) ? habit.get(t.id) : 1000 + pos.get(t.id));
+  active.sort(([ta, pa], [tb, pb]) => (pa.done - pb.done) || (score(ta) - score(tb)));
 
   let html = `
     <section class="daybar">
@@ -283,6 +288,25 @@ function todayView() {
 
   if (isToday) html += missedSection(tracks);
   return html;
+}
+
+/**
+ * הסדר הרגיל של הסימונים ב-10 הימים האחרונים: לכל ספר — הממוצע של המקום שלו
+ * בסדר הסימון של כל יום (0 = סומן ראשון, 1 = סומן אחרון). ספר בלי נתונים לא מופיע.
+ */
+function habitRank(tracks) {
+  const sums = new Map();
+  for (let i = 0; i < 10; i++) {
+    const d = addDays(state.today, -i);
+    const marked = tracks.filter((t) => t.markedAt?.[d]).sort((a, b) => a.markedAt[d] - b.markedAt[d]);
+    if (marked.length < 2) continue; // יום עם סימון אחד בלבד לא מלמד על הסדר
+    marked.forEach((t, idx) => {
+      const r = idx / (marked.length - 1);
+      const cur = sums.get(t.id) || [0, 0];
+      sums.set(t.id, [cur[0] + r, cur[1] + 1]);
+    });
+  }
+  return new Map([...sums].map(([id, [sum, n]]) => [id, sum / n]));
 }
 
 function portionCard(t, p, ds) {
@@ -949,7 +973,9 @@ $app.addEventListener('click', (e) => {
       const key = `${t.id}|${state.date}`;
       const amount = p.done ? null : (t.mode === 'calendar' ? p.count : (state.pending[key] || p.count));
       delete state.pending[key];
-      safe(() => state.store.setLog(t.id, state.date, amount));
+      // שומרים גם את שעת הסימון (רק כשמסמנים את היום עצמו), כדי לסדר את הרשימה לפי ההרגל
+      const markTime = amount ? (state.date === state.today ? Date.now() : undefined) : null;
+      safe(() => state.store.setLog(t.id, state.date, amount, markTime));
       break;
     }
     case 'amt': {
