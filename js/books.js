@@ -9,6 +9,7 @@ export const UNIT_TYPES = {
   seif: { label: 'סעיף', plural: 'סעיפים' },
   pasuk: { label: 'פסוק', plural: 'פסוקים' },
   page: { label: 'עמוד', plural: 'עמודים' },
+  torah: { label: 'תורה', plural: 'תורות' },
   other: { label: '', plural: '' },
 };
 
@@ -128,6 +129,15 @@ group('מוסר וחסידות', [
       { name: 'הלכות לשון הרע', chapters: CC_LH, chapterLabel: 'כלל' },
       { name: 'הלכות רכילות', chapters: CC_RECHILUS, chapterLabel: 'כלל' },
     ] },
+  { id: 'likutei-torot', name: 'ליקוטי מוהר״ן (לפי תורות)', unit: 'torah',
+    pick: {
+      label: 'אילו חלקים?', prefix: 'ליקוטי מוהר״ן – ',
+      groups: [{ title: 'ליקוטי מוהר״ן', items: [{ name: 'חלק א׳', start: 1, end: 286 }, { name: 'חלק ב׳ (תנינא)', start: 1, end: 125 }] }],
+      nameFor: (names, all) => (all ? 'ליקוטי מוהר״ן (לפי תורות)' : `ליקוטי מוהר״ן ${names[0]}`),
+    } },
+  { id: 'likutei-pages', name: 'ליקוטי מוהר״ן (לפי עמודים בהוצאה שלך)', unit: 'page', editRange: true,
+    rangeHelp: 'כתוב את מספר העמוד הראשון והאחרון בהוצאה שאיתה אתה לומד.',
+    parts: [{ name: '', start: 1, end: 500 }] },
   { id: 'mesilat', name: 'מסילת ישרים', unit: 'perek', parts: [{ name: '', start: 1, end: 26 }] },
   { id: 'tanya', name: 'תניא – ליקוטי אמרים', unit: 'perek', parts: [{ name: '', start: 1, end: 53 }] },
 ]);

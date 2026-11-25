@@ -178,7 +178,7 @@ export function isFinished(t) {
 
 /** ימים שהיה בהם לימוד מתוכנן ולא סומנו (רק במצב לוח קבוע), מהחדש לישן */
 export function missedDays(t, today = todayStr(), limit = 60) {
-  if (t.mode !== 'calendar' && !t.fixed) return [];
+  if ((t.mode !== 'calendar' && !t.fixed) || !isRequired(t)) return [];
   const out = [];
   for (let d = t.startDate; d < today; d = addDays(d, 1)) {
     const p = portionFor(t, d);
@@ -236,16 +236,24 @@ export function estimatedFinish(t, today = todayStr()) {
 }
 
 /** מצב כללי של יום: כמה לימודים היו מתוכננים וכמה סומנו */
+/** האם הלימוד חובה (ברירת מחדל) או רשות */
+export const isRequired = (t) => t.required !== false;
+
+/**
+ * מצב של יום: due/done — רק לימודי החובה. optDue/optDone — לימודי הרשות.
+ * לימוד רשות שלא סומן לא נחשב "חסר".
+ */
 export function dayStatus(tracks, ds) {
   let due = 0;
   let done = 0;
+  let optDue = 0;
+  let optDone = 0;
   for (const t of tracks) {
     const p = portionFor(t, ds);
     if (!p) continue;
-    due++;
-    if (p.done) done++;
+    if (isRequired(t)) { due++; if (p.done) done++; } else { optDue++; if (p.done) optDone++; }
   }
-  return { due, done };
+  return { due, done, optDue, optDone };
 }
 
 /** יוצר לימוד חדש עם ערכי ברירת מחדל */

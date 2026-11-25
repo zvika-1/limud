@@ -297,3 +297,13 @@ button.cal-day:hover { outline: 2px solid var(--ink-2); outline-offset: 1px; }
 .members { display: flex; flex-direction: column; margin: 6px 0; }
 .member { padding: 8px 0; border-top: 1px solid var(--line); }
 .member b { word-break: break-all; }
+
+/* נקודה ביום שבו לא נלמדו כל ספרי הרשות */
+.cal-day.opt-missing::before { content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--ink-2); }
+.cal-day.done.opt-missing::before { background: #fff; }
+.dot-sample { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); display: inline-block; margin: 0 4px; }
+.tag-opt { display: inline-block; font-size: .7rem; font-weight: 600; color: var(--ink-2); background: var(--tint); border-radius: 6px; padding: 0 6px; margin-inline-start: 6px; vertical-align: middle; }
+
+.request-box { background: var(--tint); border-radius: 10px; padding: 8px 12px; }
+.request-box summary { cursor: pointer; font-weight: 600; color: var(--primary); font-size: .92rem; }
+.request-box textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; margin: 6px 0; background: var(--surface); }

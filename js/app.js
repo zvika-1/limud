@@ -7,7 +7,7 @@ import {
 } from './hebrew.js';
 import {
   totalUnits, rangeName, portionText, allUnitNames, portionFor, progressPos, isFinished, missedDays, streak,
-  estimatedFinish, dayStatus, newTrack, noLearningReason,
+  estimatedFinish, dayStatus, newTrack, noLearningReason, isRequired,
 } from './schedule.js';
 
 const $app = document.getElementById('app');
@@ -261,10 +261,22 @@ function todayView() {
   }
 
   if (active.length) {
-    const all = doneCount === active.length;
-    html += `<div class="summary ${all ? 'all-done' : ''}">
-      ${all ? '🎉 כל הכבוד! סיימת את כל הלימוד של ' + (isToday ? 'היום' : 'יום זה') : `סימנת ${doneCount} מתוך ${active.length}`}
-      <div class="bar"><div style="width:${(doneCount / active.length) * 100}%"></div></div>
+    // הסיכום נספר לפי לימודי החובה. לימודי רשות לא נחשבים חסרים
+    const req = active.filter(([t]) => isRequired(t));
+    const reqDone = req.filter(([, p]) => p.done).length;
+    const opt = active.length - req.length;
+    const optLeft = active.filter(([t, p]) => !isRequired(t) && !p.done).length;
+    const all = reqDone === req.length;
+    const dayWord = isToday ? 'היום' : 'יום זה';
+    const msg = !req.length
+      ? `${opt - optLeft} מתוך ${opt} לימודי רשות סומנו`
+      : all
+        ? `🎉 כל הכבוד! סיימת את לימוד החובה של ${dayWord}${optLeft ? (optLeft === 1 ? ' (נשאר לימוד רשות אחד)' : ` (נשארו ${optLeft} לימודי רשות)`) : ''}`
+        : `סימנת ${reqDone} מתוך ${req.length} לימודי חובה${opt ? ` · רשות: ${opt - optLeft}/${opt}` : ''}`;
+    const frac = req.length ? reqDone / req.length : (opt - optLeft) / opt;
+    html += `<div class="summary ${all && req.length ? 'all-done' : ''}">
+      ${msg}
+      <div class="bar"><div style="width:${frac * 100}%"></div></div>
     </div>`;
   }
 
@@ -326,7 +338,7 @@ function portionCard(t, p, ds) {
     </div>`;
   return `<div class="card portion ${p.done ? 'done' : ''}">
     <div class="info">
-      <div class="tname">${esc(t.name)}</div>
+      <div class="tname">${esc(t.name)}${isRequired(t) ? '' : '<span class="tag-opt">רשות</span>'}</div>
       <div class="range">${esc(p.fixed ? p.label : rangeName(t, rangeFrom, amount))}</div>
       ${t.fixed
         ? `<div class="mini">🔥 רצף: ${streak(t, state.today)} · ימים שלמדת: ${progressPos(t)}</div>`
@@ -378,7 +390,7 @@ function booksView() {
       const days = t.days.every(Boolean) ? 'כל יום' : t.days.map((v, i) => (v ? WEEKDAY_SHORT[i] : '')).filter(Boolean).join(' ');
       return `<div class="card book">
         <div class="info">
-          <div class="tname">${esc(t.name)}</div>
+          <div class="tname">${esc(t.name)}${isRequired(t) ? '' : '<span class="tag-opt">רשות</span>'}</div>
           ${t.fixed
             ? `<div class="meta">לימוד קבוע לפי התאריך · ${days}</div>
                <div class="mini">ימים שלמדת: ${pos}</div>`
@@ -474,6 +486,13 @@ function editView() {
       </select>
     </label>
 
+    ${d._isNew && !state.demo ? `<details class="request-box">
+      <summary>לא מצאת את הספר ברשימה? בקשת הוספה</summary>
+      <p class="muted small">כתוב איזה ספר, ואיך לחלק אותו (לפי פרקים, סימנים, עמודים וכו'). הבקשה תגיע למנהל האפליקציה.</p>
+      <textarea id="request-text" rows="3" placeholder="למשל: ספר ״נועם אלימלך״ לפי פרשות השבוע"></textarea>
+      <button type="button" class="btn small" data-act="send-request">שליחת הבקשה</button>
+    </details>` : ''}
+
     ${preset?.pick ? pickView(d, preset) : ''}
 
     <label class="field">
@@ -505,6 +524,13 @@ function editView() {
             <option value="1" ${d.hebNums ? 'selected' : ''}>באותיות (א׳, ב׳…)</option>
             <option value="0" ${!d.hebNums ? 'selected' : ''}>במספרים (1, 2…)</option>
           </select></label>
+      </div>` : preset.editRange ? `
+      <p class="muted">${esc(preset.rangeHelp || '')}</p>
+      <div class="field-row">
+        <label class="field"><span>מ${esc(d.unitLabel)} מספר</span>
+          <input type="number" min="1" data-field="partStart" value="${d.parts[0].start}"></label>
+        <label class="field"><span>עד ${esc(d.unitLabel)} מספר</span>
+          <input type="number" min="1" data-field="partEnd" value="${d.parts[0].end}"></label>
       </div>` : `<p class="muted">${total ? `${total} ${esc(d.amud ? 'עמודים' : d.unitPlural)} בסך הכול` : 'עוד לא נבחר כלום'}</p>`}
 
     ${allowAmud ? `<label class="check-field"><input type="checkbox" data-field="amud" ${d.amud ? 'checked' : ''}>
@@ -529,6 +555,14 @@ function editView() {
       <label class="field grow"><span>מתחילים מ-</span>
         <select data-field="startPos">${names.map((n, i) => `<option value="${i}" ${i === d.startPos ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
     </div>
+
+    <fieldset class="field">
+      <legend>סוג הלימוד</legend>
+      <label class="radio"><input type="radio" name="required" data-field="required" value="1" ${d.required !== false ? 'checked' : ''}>
+        <span><b>חובה</b>: אם לא סימנתי, היום נחשב לא גמור והלימוד מופיע בימים שלא סומנו.</span></label>
+      <label class="radio"><input type="radio" name="required" data-field="required" value="0" ${d.required === false ? 'checked' : ''}>
+        <span><b>רשות</b>: גם אם לא למדתי, היום נחשב גמור. בלוח המעקב תופיע נקודה קטנה ביום שלא נלמדו בו כל ספרי הרשות.</span></label>
+    </fieldset>
 
     <fieldset class="field">
       <legend>ימי לימוד</legend>
@@ -574,6 +608,14 @@ function fixedFormView(d, presetOptions) {
     <label class="field narrow"><span>תאריך התחלה</span>
       <input type="date" data-field="startDate" value="${d.startDate}"></label>
     <fieldset class="field">
+      <legend>סוג הלימוד</legend>
+      <label class="radio"><input type="radio" name="required" data-field="required" value="1" ${d.required !== false ? 'checked' : ''}>
+        <span><b>חובה</b>: אם לא סימנתי, היום נחשב לא גמור והלימוד מופיע בימים שלא סומנו.</span></label>
+      <label class="radio"><input type="radio" name="required" data-field="required" value="0" ${d.required === false ? 'checked' : ''}>
+        <span><b>רשות</b>: גם אם לא למדתי, היום נחשב גמור. בלוח המעקב תופיע נקודה קטנה ביום שלא נלמדו בו כל ספרי הרשות.</span></label>
+    </fieldset>
+
+    <fieldset class="field">
       <legend>ימי לימוד</legend>
       <div class="days">
         ${WEEKDAY_NAMES.map((n, i) => `<label class="day-chip"><input type="checkbox" data-field="day" data-day="${i}" ${d.days[i] ? 'checked' : ''}><span>${n}</span></label>`).join('')}
@@ -614,7 +656,7 @@ function applyPreset(d, id) {
   }
   const u = UNIT_TYPES[p.unit];
   Object.assign(d, {
-    name: p.name, unitType: p.unit, unitLabel: u.label, unitPlural: u.plural, hebNums: true,
+    name: p.name, unitType: p.unit, unitLabel: u.label, unitPlural: u.plural, hebNums: p.unit !== 'page',
     perDay: p.perDay || d.perDay,
   });
   if (p.pick) {
@@ -668,6 +710,7 @@ function updateDraftField(el) {
     case 'day': d.days[Number(el.dataset.day)] = el.checked; return false;
     case 'holidays': d.holidays = v; return false;
     case 'region': d.region = v; return false;
+    case 'required': d.required = v === '1'; return false;
     default: return false;
   }
 }
@@ -767,16 +810,24 @@ function signupDate(tracks) {
   return d && d < state.today ? d : state.today;
 }
 
+/** מחזיר [מחלקה, הסבר, האם להוסיף נקודה (לא נלמדו כל ספרי הרשות)] */
 function dayClass(tracks, ds, signup) {
-  if (ds < signup) return ['before', ''];
+  if (ds < signup) return ['before', '', false];
   const s = dayStatus(tracks, ds);
   const future = ds > state.today;
-  if (!s.due) return [future ? 'future' : 'off', 'אין לימוד מתוכנן'];
-  if (future && !s.done) return ['future', 'יום עתידי'];
-  if (ds === state.today && !s.done) return ['future', 'עוד לא סומן היום'];
+  const optMissing = !future && s.optDue > s.optDone;
+  const optTip = s.optDue ? ` · רשות: ${s.optDone} מתוך ${s.optDue}` : '';
+  if (!s.due) {
+    // אין לימודי חובה ביום הזה: נחשב כהושלם אם למדו משהו מהרשות
+    if (future) return ['future', 'יום עתידי', false];
+    if (s.optDone) return ['done', `לימוד רשות${optTip}`, optMissing];
+    return ['off', `אין לימוד חובה${optTip}`, optMissing && ds !== state.today];
+  }
+  if (future && !s.done) return ['future', 'יום עתידי', false];
+  if (ds === state.today && !s.done) return ['future', 'עוד לא סומן היום', false];
   const r = s.done / s.due;
   const cls = r === 1 ? 'done' : r >= 0.5 ? 'most' : r > 0 ? 'partial' : 'missed';
-  return [cls, `סומנו ${s.done} מתוך ${s.due}`];
+  return [cls, `חובה: ${s.done} מתוך ${s.due}${optTip}`, optMissing && (ds !== state.today || r === 1)];
 }
 
 function monthView(tracks, ms, signup) {
@@ -788,7 +839,8 @@ function monthView(tracks, ms, signup) {
   let cells = WEEKDAY_SHORT.map((n) => `<span class="cal-wd">${n}</span>`).join('');
   for (let i = 0; i < weekday(ms); i++) cells += '<span class="cal-day blank"></span>';
   for (let ds = ms; ds <= last; ds = addDays(ds, 1)) {
-    const [cls, tip] = dayClass(tracks, ds, signup);
+    const [clsBase, tip, dot] = dayClass(tracks, ds, signup);
+    const cls = clsBase + (dot ? ' opt-missing' : '');
     const day = Number(ds.slice(8));
     const today = ds === state.today ? ' today' : '';
     const label = `${formatShort(ds)} · ${formatHebrew(ds)}${tip ? ': ' + tip : ''}`;
@@ -823,6 +875,7 @@ function calendarView(tracks) {
       <span><i class="cal-day missed"></i>לא סומן</span>
       <span><i class="cal-day future"></i>עתידי</span>
       <span><i class="cal-day off"></i>אין לימוד</span>
+      ${tracks.some((t) => !isRequired(t)) ? '<span><i class="dot-sample"></i>לא נלמדו כל ספרי הרשות</span>' : ''}
     </div>
     <p class="muted small">לחיצה על יום פותחת אותו לסימון (עד חודש קדימה).</p>
   </section>`;
@@ -895,7 +948,22 @@ function membersSection() {
       </div>`).join('')}</div>
       <button class="link" data-act="load-members">רענון</button>`;
   }
-  return `<section class="card col"><h3>👤 משתמשים רשומים (מנהל)</h3>${body}</section>`;
+  const rq = state.requests;
+  let reqBody;
+  if (!rq) reqBody = '<button class="btn" data-act="load-requests">הצגת הבקשות</button>';
+  else if (rq.error) reqBody = `<p class="muted">לא הצלחתי לטעון: ${esc(rq.error)}</p>`;
+  else if (!rq.list.length) reqBody = '<p class="muted">אין בקשות פתוחות.</p><button class="link" data-act="load-requests">רענון</button>';
+  else {
+    reqBody = `<div class="members">${[...rq.list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((r) => `<div class="member">
+        <div>${esc(r.text)}</div>
+        <div class="muted small">${esc(r.name || r.email)} · ${r.createdAt ? r.createdAt.toLocaleDateString('he-IL') : ''}
+          · <button class="link" data-act="del-request" data-id="${esc(r.id)}">סמן כטופל (מחיקה)</button></div>
+      </div>`).join('')}</div>
+      <p class="muted small">כדי להוסיף ספר, העתק את הבקשה ושלח אותה ל-Claude בשיחה.</p>
+      <button class="link" data-act="load-requests">רענון</button>`;
+  }
+  return `<section class="card col"><h3>👤 משתמשים רשומים (מנהל)</h3>${body}</section>
+  <section class="card col"><h3>📩 בקשות להוספת ספרים (מנהל)</h3>${reqBody}</section>`;
 }
 
 function exportBackup() {
@@ -952,6 +1020,24 @@ $app.addEventListener('click', (e) => {
       state.fb.listMembers()
         .then((list) => { state.members = { list }; render(); })
         .catch((e) => { state.members = { error: e.code === 'permission-denied' ? 'אין הרשאה (צריך לעדכן את חוקי האבטחה ב-Firebase)' : e.message }; render(); });
+      break;
+    case 'send-request': {
+      const text = document.getElementById('request-text')?.value.trim();
+      if (!text) { toast('כתוב קודם איזה ספר להוסיף'); break; }
+      safe(async () => { await state.fb.sendRequest(state.user, text); toast('הבקשה נשלחה ✓'); document.getElementById('request-text').value = ''; });
+      break;
+    }
+    case 'load-requests':
+      state.fb.listRequests()
+        .then((list) => { state.requests = { list }; render(); })
+        .catch((e) => { state.requests = { error: e.code === 'permission-denied' ? 'אין הרשאה (צריך לעדכן את חוקי האבטחה ב-Firebase)' : e.message }; render(); });
+      break;
+    case 'del-request':
+      safe(async () => {
+        await state.fb.deleteRequest(id);
+        state.requests.list = state.requests.list.filter((r) => r.id !== id);
+        render();
+      });
       break;
     case 'theme':
       localStorage.setItem('limud-theme', el.dataset.theme);

@@ -187,6 +187,17 @@ export async function initFirebase(config, googleWebClientId) {
         app: isNative ? 'android' : 'web',
       }, { merge: true }).catch(() => {});
     },
+    /** בקשה להוספת ספר — נשמרת אצל המנהל */
+    async sendRequest(user, text) {
+      await fs.addDoc(fs.collection(db, 'requests'), {
+        uid: user.uid, email: user.email || '', name: user.displayName || '', text, createdAt: fs.serverTimestamp(),
+      });
+    },
+    async listRequests() {
+      const snap = await fs.getDocs(fs.collection(db, 'requests'));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.() || null }));
+    },
+    deleteRequest(id) { return fs.deleteDoc(fs.doc(db, 'requests', id)); },
     /** רשימת כל המשתמשים — עובד רק למנהל (לפי חוקי האבטחה) */
     async listMembers() {
       const snap = await fs.getDocs(fs.collection(db, 'members'));
