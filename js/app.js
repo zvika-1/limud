@@ -161,6 +161,12 @@ async function start() {
   // מספר הגרסה של אפליקציית האנדרואיד (נכתב בזמן הבנייה ב-GitHub)
   if (isNative) {
     fetch('version.txt').then((r) => (r.ok ? r.text() : '')).then((v) => { state.appVersion = v.trim(); }).catch(() => {});
+  } else {
+    // באתר: מספר הגרסה האחרונה שפורסמה ב-GitHub (האתר תמיד מעודכן לגרסה האחרונה)
+    fetch('https://api.github.com/repos/zvika-1/limud/releases/latest')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.tag_name) state.siteVersion = j.tag_name.replace(/^v/, ''); })
+      .catch(() => {});
   }
   if (!isNative && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
@@ -971,6 +977,12 @@ function settingsView() {
     ${state.appVersion ? `<p>גרסת האפליקציה המותקנת: <b>${esc(state.appVersion)}</b></p>` : ''}
     <p><b>אנדרואיד (Chrome):</b> תפריט ⋮ ← "הוספה למסך הבית" / "התקנת אפליקציה".</p>
     <p><b>אייפון (Safari):</b> כפתור השיתוף ⬆️ ← "הוסף למסך הבית".</p>
+  </section>
+  <section class="credit">
+    <div>פותח ע״י <b>צביקה שטרן</b></div>
+    ${state.appVersion || state.siteVersion ? `<div>גרסה ${esc(state.appVersion || state.siteVersion)}</div>` : ''}
+    <div>כסלו תשפ״ז</div>
+    <div class="credit-share">מצווה להפיץ!!</div>
   </section>`;
 }
 

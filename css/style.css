@@ -307,3 +307,6 @@ button.cal-day:hover { outline: 2px solid var(--ink-2); outline-offset: 1px; }
 .request-box { background: var(--tint); border-radius: 10px; padding: 8px 12px; }
 .request-box summary { cursor: pointer; font-weight: 600; color: var(--primary); font-size: .92rem; }
 .request-box textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; margin: 6px 0; background: var(--surface); }
+
+.credit { text-align: center; color: var(--ink-2); font-size: .9rem; padding: 18px 8px 8px; line-height: 1.7; }
+.credit-share { color: var(--primary); font-weight: 800; font-size: 1.05rem; margin-top: 2px; }
