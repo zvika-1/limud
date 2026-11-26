@@ -74,12 +74,30 @@ export function rangeName(t, from, count) {
   const end = from + count;
   const a = Math.floor(from + EPS);
   const b = Math.ceil(end - EPS) - 1;
-  const startHalf = from > a + EPS; // מתחילים מאמצע היחידה
-  const endHalf = end < b + 1 - EPS; // מסיימים באמצע היחידה
-  if (!startHalf && !endHalf) return rangeNameInt(t, a, b - a + 1);
-  if (a === b) return `${unitName(t, a)} (${startHalf ? 'חצי שני' : 'חצי ראשון'})`;
-  return `${unitName(t, a)}${startHalf ? ' (חצי שני)' : ''} – ${unitName(t, b)}${endHalf ? ' (חצי ראשון)' : ''}`;
+  const startFrac = from - a; // מתחילים מאמצע היחידה (0 = מההתחלה)
+  const endFrac = end - b; // מסיימים באמצע היחידה (1 = עד הסוף)
+  const startMid = startFrac > EPS;
+  const endMid = endFrac < 1 - EPS;
+  if (!startMid && !endMid) return rangeNameInt(t, a, b - a + 1);
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  const half = (x) => Math.abs(x - 0.5) < EPS;
+  if (a === b) {
+    if (half(startFrac) && !endMid) return `${unitName(t, a)} (חצי שני)`;
+    if (!startMid && half(endFrac)) return `${unitName(t, a)} (חצי ראשון)`;
+    if (!startMid) return `${unitName(t, a)} (עד ${pct(endFrac)})`;
+    if (!endMid) return `${unitName(t, a)} (מ-${pct(startFrac)} עד הסוף)`;
+    return `${unitName(t, a)} (${pct(startFrac)}–${pct(endFrac)})`;
+  }
+  const s1 = !startMid ? '' : half(startFrac) ? ' (חצי שני)' : ` (מ-${pct(startFrac)})`;
+  const s2 = !endMid ? '' : half(endFrac) ? ' (חצי ראשון)' : ` (עד ${pct(endFrac)})`;
+  return `${unitName(t, a)}${s1} – ${unitName(t, b)}${s2}`;
 }
+
+/** לכמה חלקים מחלקים יחידה בסימון חלקי (ברירת מחדל: חצאים) */
+export const splitOf = (t) => t.split || 2;
+
+/** עיגול לרשת של החלקים, כדי למנוע שגיאות עיגול של מספרים עשרוניים */
+export const snap = (x, n) => Math.round(x * n * 1000) / (n * 1000);
 
 function rangeNameInt(t, from, count) {
   if (count <= 1) return unitName(t, from);
@@ -169,8 +187,8 @@ export function portionFor(t, ds) {
   const from = pacePosBefore(t, ds);
   if (logged) return { from, count: Math.min(logged, Math.max(total - from, 0)), done: true };
   if (!isLearningDay(t, ds) || from >= total - EPS) return null;
-  // אם אתמול נלמד רק חצי — המנה של היום משלימה עד סוף היחידה
-  let count = Math.floor(from + t.perDay + EPS) - from;
+  // אם אתמול נלמד רק חלק — המנה של היום משלימה עד סוף היחידה
+  let count = snap(Math.floor(from + t.perDay + EPS) - from, splitOf(t));
   if (count < EPS) count = t.perDay;
   return { from, count: Math.min(count, total - from), done: false };
 }

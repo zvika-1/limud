@@ -7,7 +7,7 @@ import {
 } from './hebrew.js';
 import {
   totalUnits, rangeName, portionText, allUnitNames, portionFor, progressPos, isFinished, missedDays, streak,
-  estimatedFinish, dayStatus, newTrack, noLearningReason, isRequired,
+  estimatedFinish, dayStatus, newTrack, noLearningReason, isRequired, splitOf, snap,
 } from './schedule.js';
 
 const $app = document.getElementById('app');
@@ -90,25 +90,37 @@ async function safe(fn) {
 }
 
 const sortedTracks = () => [...state.tracks].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-/** מספר עם חצאים: 0.5 → ½, 2.5 → 2½ */
+/** מספר עם שברים: 0.5 → ½, 2.25 → 2¼, 0.4 → 2/5 */
+const FRACS = { '1/2': '½', '1/3': '⅓', '2/3': '⅔', '1/4': '¼', '3/4': '¾', '1/5': '⅕', '2/5': '⅖', '3/5': '⅗', '4/5': '⅘' };
 const fmtNum = (n) => {
   const whole = Math.floor(n + 1e-9);
-  const half = n - whole > 0.25;
-  return half ? (whole ? `${whole}½` : '½') : String(whole);
+  const frac = n - whole;
+  if (frac < 1e-6) return String(whole);
+  for (const den of [2, 3, 4, 5, 10]) {
+    const num = Math.round(frac * den);
+    if (Math.abs(frac * den - num) < 1e-6) {
+      const g = num % 2 === 0 && den % 2 === 0 ? 2 : 1;
+      const key = `${num / g}/${den / g}`;
+      return `${whole || ''}${FRACS[key] || (whole ? ' ' : '') + key}`;
+    }
+  }
+  return n.toFixed(2);
 };
 const unitWord = (t, n) => (n <= 1 ? t.unitLabel : (t.unitPlural || t.unitLabel));
 const amountText = (t, n) => (t.amud ? `${fmtNum(n)} ${n <= 1 ? 'עמוד' : 'עמודים'}` : `${fmtNum(n)} ${unitWord(t, n)}`);
 
 /**
- * הצעד הבא בכפתורי הכמות.
- * מנה שמתחילה בתחילת יחידה: 2 → 1 → ½, ובחזרה ½ → 1 → 2.
- * מנה שמתחילה מאמצע יחידה: ½ → 1½ → 2½ (כך שהיום תמיד נגמר בסוף יחידה).
+ * הצעד הבא בכפתורי הכמות (n = לכמה חלקים מחלקים יחידה).
+ * כשהמנה נגמרת באמצע יחידה — זזים בחלק אחד (למשל רבע). כשהיא נגמרת בסוף יחידה — זזים ביחידה שלמה,
+ * חוץ מירידה מתחת ל-1, שמחלקת לחלקים.
  */
-function stepAmount(cur, delta, from) {
-  const midStart = from % 1 > 0.25;
-  if (delta < 0) return cur > 1 + 1e-9 ? cur - 1 : 0.5;
-  if (!midStart && Math.abs(cur - 0.5) < 1e-9) return 1;
-  return cur + 1;
+function stepAmount(cur, delta, from, n) {
+  const endMid = Math.abs((from + cur) - Math.round(from + cur)) > 1e-6;
+  const part = 1 / n;
+  const next = delta < 0
+    ? (endMid || cur <= 1 + 1e-9 ? cur - part : cur - 1)
+    : (endMid ? cur + part : cur + 1);
+  return snap(Math.max(part, next), n);
 }
 
 // ---------------- התחלה ----------------
@@ -349,8 +361,8 @@ function portionCard(t, p, ds) {
     amount = Math.min(state.pending[key], total - p.from);
   }
   const stepper = t.mode === 'calendar' ? '' : `
-    <div class="stepper" title="אפשר לשנות כמה למדת בפועל, גם חצי">
-      <button data-act="amt" data-id="${t.id}" data-delta="-1" ${amount <= 0.5 ? 'disabled' : ''} aria-label="פחות">−</button>
+    <div class="stepper" title="אפשר לשנות כמה למדת בפועל, גם חלק מיחידה">
+      <button data-act="amt" data-id="${t.id}" data-delta="-1" ${amount <= 1 / splitOf(t) + 1e-9 ? 'disabled' : ''} aria-label="פחות">−</button>
       <span>${amountText(t, amount)}</span>
       <button data-act="amt" data-id="${t.id}" data-delta="1" ${rangeFrom + amount >= total - 1e-9 ? 'disabled' : ''} aria-label="יותר">+</button>
     </div>`;
@@ -561,11 +573,21 @@ function editView() {
 
     <fieldset class="field">
       <legend>איך הלימוד מתקדם?</legend>
+      
       <label class="radio"><input type="radio" name="mode" data-field="mode" value="pace" ${d.mode !== 'calendar' ? 'checked' : ''}>
         <span><b>לפי הקצב שלי</b>: כל יום ממשיכים מהמקום שבו עצרתי. אם דילגתי על יום, לא "מפגרים". אפשר לשנות בכל יום את הכמות שלמדתי בפועל.</span></label>
       <label class="radio"><input type="radio" name="mode" data-field="mode" value="calendar" ${d.mode === 'calendar' ? 'checked' : ''}>
         <span><b>לוח קבוע</b> (כמו הדף היומי): לכל תאריך יש מנה קבועה, והלוח ממשיך גם אם לא למדתי. ימים שלא סומנו יופיעו להשלמה.</span></label>
     </fieldset>
+
+    ${d.mode !== 'calendar' ? `<label class="field narrow">
+      <span>סימון חלקי של ${esc(d.unitLabel || 'יחידה')} ארוך/ה</span>
+      <select data-field="split">
+        ${[[2, 'חצאים (½)'], [3, 'שלישים (⅓)'], [4, 'רבעים (¼)'], [5, 'חמישיות (20%)'], [10, 'עשיריות (10%)']]
+          .map(([n, l]) => `<option value="${n}" ${splitOf(d) === n ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <small class="muted">בכל לחיצה על "−" או "+" הכמות זזה בחלק אחד, והמנה מראה כמה אחוז מה${esc(d.unitLabel || 'יחידה')} נלמד.</small>
+    </label>` : ''}
 
     <div class="field-row">
       <label class="field"><span>תאריך התחלה</span>
@@ -722,7 +744,8 @@ function updateDraftField(el) {
       return true;
     }
     case 'perDay': d.perDay = int(v); return 'change';
-    case 'mode': d.mode = v; return false;
+    case 'mode': d.mode = v; return true;
+    case 'split': d.split = Number(v) || 2; return false;
     case 'startDate': d.startDate = v || todayStr(); return false;
     case 'startPos': d.startPos = parseInt(v, 10) || 0; return false;
     case 'day': d.days[Number(el.dataset.day)] = el.checked; return false;
@@ -1088,7 +1111,7 @@ $app.addEventListener('click', (e) => {
       const key = `${t.id}|${state.date}`;
       const max = totalUnits(t) - p.from;
       const cur = p.done ? p.count : (state.pending[key] || p.count);
-      const next = Math.max(0.5, Math.min(max, stepAmount(cur, Number(el.dataset.delta), p.from)));
+      const next = Math.max(1 / splitOf(t), Math.min(max, stepAmount(cur, Number(el.dataset.delta), p.from, splitOf(t))));
       if (p.done) safe(() => state.store.setLog(t.id, state.date, next));
       else { state.pending[key] = next; render(); }
       break;
