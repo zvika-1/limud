@@ -64,8 +64,24 @@ export function unitName(t, i) {
   return [loc.part.name, chapText(t, loc), t.unitLabel, numText(t, loc)].filter(Boolean).join(' ');
 }
 
-/** טקסט לטווח יחידות, למשל "בראשית פרקים א׳–ב׳" */
+const EPS = 1e-9;
+
+/**
+ * טקסט לטווח יחידות, למשל "בראשית פרקים א׳–ב׳".
+ * תומך גם בחצאים: "פרק ג׳ (חצי ראשון)", "פרק ג׳ (חצי שני) – פרק ד׳".
+ */
 export function rangeName(t, from, count) {
+  const end = from + count;
+  const a = Math.floor(from + EPS);
+  const b = Math.ceil(end - EPS) - 1;
+  const startHalf = from > a + EPS; // מתחילים מאמצע היחידה
+  const endHalf = end < b + 1 - EPS; // מסיימים באמצע היחידה
+  if (!startHalf && !endHalf) return rangeNameInt(t, a, b - a + 1);
+  if (a === b) return `${unitName(t, a)} (${startHalf ? 'חצי שני' : 'חצי ראשון'})`;
+  return `${unitName(t, a)}${startHalf ? ' (חצי שני)' : ''} – ${unitName(t, b)}${endHalf ? ' (חצי ראשון)' : ''}`;
+}
+
+function rangeNameInt(t, from, count) {
   if (count <= 1) return unitName(t, from);
   const a = locate(t, from);
   const b = locate(t, from + count - 1);
@@ -152,8 +168,11 @@ export function portionFor(t, ds) {
   }
   const from = pacePosBefore(t, ds);
   if (logged) return { from, count: Math.min(logged, Math.max(total - from, 0)), done: true };
-  if (!isLearningDay(t, ds) || from >= total) return null;
-  return { from, count: Math.min(t.perDay, total - from), done: false };
+  if (!isLearningDay(t, ds) || from >= total - EPS) return null;
+  // אם אתמול נלמד רק חצי — המנה של היום משלימה עד סוף היחידה
+  let count = Math.floor(from + t.perDay + EPS) - from;
+  if (count < EPS) count = t.perDay;
+  return { from, count: Math.min(count, total - from), done: false };
 }
 
 /** כמה יחידות נלמדו (מתחילת המחזור הנוכחי, כולל נקודת ההתחלה) */
@@ -173,7 +192,7 @@ export function progressPos(t) {
 
 export function isFinished(t) {
   if (t.fixed) return false;
-  return progressPos(t) >= totalUnits(t);
+  return totalUnits(t) - progressPos(t) < EPS || progressPos(t) >= totalUnits(t);
 }
 
 /** ימים שהיה בהם לימוד מתוכנן ולא סומנו (רק במצב לוח קבוע), מהחדש לישן */

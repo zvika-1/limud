@@ -90,8 +90,26 @@ async function safe(fn) {
 }
 
 const sortedTracks = () => [...state.tracks].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-const unitWord = (t, n) => (n === 1 ? t.unitLabel : (t.unitPlural || t.unitLabel)) + (t.amud ? '' : '');
-const amountText = (t, n) => (t.amud ? `${n} ${n === 1 ? 'עמוד' : 'עמודים'}` : `${n} ${unitWord(t, n)}`);
+/** מספר עם חצאים: 0.5 → ½, 2.5 → 2½ */
+const fmtNum = (n) => {
+  const whole = Math.floor(n + 1e-9);
+  const half = n - whole > 0.25;
+  return half ? (whole ? `${whole}½` : '½') : String(whole);
+};
+const unitWord = (t, n) => (n <= 1 ? t.unitLabel : (t.unitPlural || t.unitLabel));
+const amountText = (t, n) => (t.amud ? `${fmtNum(n)} ${n <= 1 ? 'עמוד' : 'עמודים'}` : `${fmtNum(n)} ${unitWord(t, n)}`);
+
+/**
+ * הצעד הבא בכפתורי הכמות.
+ * מנה שמתחילה בתחילת יחידה: 2 → 1 → ½, ובחזרה ½ → 1 → 2.
+ * מנה שמתחילה מאמצע יחידה: ½ → 1½ → 2½ (כך שהיום תמיד נגמר בסוף יחידה).
+ */
+function stepAmount(cur, delta, from) {
+  const midStart = from % 1 > 0.25;
+  if (delta < 0) return cur > 1 + 1e-9 ? cur - 1 : 0.5;
+  if (!midStart && Math.abs(cur - 0.5) < 1e-9) return 1;
+  return cur + 1;
+}
 
 // ---------------- התחלה ----------------
 
@@ -331,10 +349,10 @@ function portionCard(t, p, ds) {
     amount = Math.min(state.pending[key], total - p.from);
   }
   const stepper = t.mode === 'calendar' ? '' : `
-    <div class="stepper" title="אפשר לשנות כמה למדת בפועל">
-      <button data-act="amt" data-id="${t.id}" data-delta="-1" ${amount <= 1 ? 'disabled' : ''} aria-label="פחות">−</button>
+    <div class="stepper" title="אפשר לשנות כמה למדת בפועל, גם חצי">
+      <button data-act="amt" data-id="${t.id}" data-delta="-1" ${amount <= 0.5 ? 'disabled' : ''} aria-label="פחות">−</button>
       <span>${amountText(t, amount)}</span>
-      <button data-act="amt" data-id="${t.id}" data-delta="1" ${rangeFrom + amount >= total ? 'disabled' : ''} aria-label="יותר">+</button>
+      <button data-act="amt" data-id="${t.id}" data-delta="1" ${rangeFrom + amount >= total - 1e-9 ? 'disabled' : ''} aria-label="יותר">+</button>
     </div>`;
   return `<div class="card portion ${p.done ? 'done' : ''}">
     <div class="info">
@@ -396,7 +414,7 @@ function booksView() {
                <div class="mini">ימים שלמדת: ${pos}</div>`
             : `<div class="meta">${amountText(t, t.perDay)} ביום · ${t.mode === 'calendar' ? 'לוח קבוע' : 'לפי הקצב שלי'} · ${days}</div>
           <div class="mini"><div class="bar thin"><div style="width:${(pos / total) * 100}%"></div></div>
-            <span>${pos}/${total}</span></div>`}
+            <span>${fmtNum(pos)}/${total}</span></div>`}
         </div>
         <div class="actions row">
           <button class="btn small" data-act="edit" data-id="${t.id}">עריכה</button>
@@ -779,7 +797,7 @@ function statsView() {
         ? `<button class="stat-head" data-act="stat-toggle" data-id="${t.id}" aria-expanded="${open}">${head}<span class="chev">${open ? '▲' : '▼'}</span></button>`
         : head}
       ${open ? `<div class="stat-grid">
-        ${t.fixed ? '' : `<div><b>${pos}</b> מתוך ${total} ${esc(unitsWord)}</div>`}
+        ${t.fixed ? '' : `<div><b>${fmtNum(pos)}</b> מתוך ${total} ${esc(unitsWord)}</div>`}
         <div>🔥 רצף: <b>${st}</b> ${st === 1 ? 'יום' : 'ימים'}</div>
         <div>📅 ימים שלמדת: <b>${daysLearned}</b></div>
         <div>${t.fixed ? '' : pos >= total ? '🎉 הושלם' : fin ? `🏁 סיום משוער: <b>${formatGreg(fin)}</b>` : ''}</div>
@@ -1070,7 +1088,7 @@ $app.addEventListener('click', (e) => {
       const key = `${t.id}|${state.date}`;
       const max = totalUnits(t) - p.from;
       const cur = p.done ? p.count : (state.pending[key] || p.count);
-      const next = Math.max(1, Math.min(max, cur + Number(el.dataset.delta)));
+      const next = Math.max(0.5, Math.min(max, stepAmount(cur, Number(el.dataset.delta), p.from)));
       if (p.done) safe(() => state.store.setLog(t.id, state.date, next));
       else { state.pending[key] = next; render(); }
       break;
