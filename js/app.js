@@ -7,7 +7,7 @@ import {
 } from './hebrew.js';
 import {
   totalUnits, rangeName, portionText, allUnitNames, portionFor, progressPos, isFinished, missedDays, streak,
-  estimatedFinish, dayStatus, newTrack, noLearningReason, isRequired, splitOf, snap,
+  estimatedFinish, dayStatus, newTrack, noLearningReason, isRequired, nextPartial, tidy,
 } from './schedule.js';
 
 const $app = document.getElementById('app');
@@ -106,7 +106,7 @@ function amountText(t, n) {
   const plural = t.amud ? 'עמודים' : (t.unitPlural || t.unitLabel);
   const whole = Math.floor(n + 1e-9);
   const frac = n - whole;
-  const pct = Math.round(frac * 100);
+  const pct = Math.floor(frac * 100 + 1e-6);
   if (frac < 1e-6) return `${whole} ${whole === 1 ? label : plural}`;
   if (Math.abs(frac - 0.5) < 1e-6) return `${fmtNum(n)} ${n < 1 ? label : plural}`;
   if (!whole) return `${pct}% מה${label}`;
@@ -114,17 +114,24 @@ function amountText(t, n) {
 }
 
 /**
- * הצעד הבא בכפתורי הכמות (n = לכמה חלקים מחלקים יחידה).
- * כשהמנה נגמרת באמצע יחידה — זזים בחלק אחד (למשל רבע). כשהיא נגמרת בסוף יחידה — זזים ביחידה שלמה,
- * חוץ מירידה מתחת ל-1, שמחלקת לחלקים.
+ * הצעד הבא בכפתורי הכמות. from = איפה המנה מתחילה, cur = הכמות הנוכחית.
+ * "−": אם המנה נגמרת בסוף יחידה — היחידה האחרונה נהיית חלקית (50%, ואם כבר נלמד ממנה חלק: 66%, 75%...).
+ *      אם המנה כבר נגמרת באמצע יחידה — מורידים את החלק הזה.
+ * "+": משלימים את היחידה החלקית, או מוסיפים יחידה שלמה.
+ * מחזיר 0 אם אי אפשר להוריד עוד.
  */
-function stepAmount(cur, delta, from, n) {
-  const endMid = Math.abs((from + cur) - Math.round(from + cur)) > 1e-6;
-  const part = 1 / n;
-  const next = delta < 0
-    ? (endMid || cur <= 1 + 1e-9 ? cur - part : cur - 1)
-    : (endMid ? cur + part : cur + 1);
-  return snap(Math.max(part, next), n);
+function stepAmount(cur, delta, from) {
+  const end = tidy(from + cur);
+  const endMid = Math.abs(end - Math.round(end)) > 1e-6;
+  let next;
+  if (delta > 0) next = endMid ? Math.ceil(end) : end + 1;
+  else if (endMid) next = Math.floor(end);
+  else {
+    const u = end - 1; // היחידה האחרונה במנה
+    const f = Math.max(0, from - u); // כמה כבר נלמד ממנה
+    next = u + nextPartial(f);
+  }
+  return Math.max(0, tidy(next - from));
 }
 
 // ---------------- התחלה ----------------
@@ -361,6 +368,25 @@ function habitRank(tracks) {
   return new Map([...sums].map(([id, [sum, n]]) => [id, sum / n]));
 }
 
+/** הטקסט שבין "−" ל-"+": "2 פרקים", "עד 66% מהפרק", "סיום הפרק + פרק אחד" */
+function stepperText(t, from, amount) {
+  const label = t.amud ? 'עמוד' : t.unitLabel;
+  const end = tidy(from + amount);
+  const endFrac = end - Math.floor(end + 1e-6);
+  const startFrac = from - Math.floor(from + 1e-6);
+  if (endFrac > 1e-6) {
+    const pct = `עד ${Math.floor(endFrac * 100 + 1e-6)}% מה${label}`;
+    const before = Math.floor(end + 1e-6) - Math.ceil(from - 1e-6); // יחידות שלמות לפני היחידה החלקית
+    return before > 0 || startFrac > 1e-6 && Math.floor(end + 1e-6) > Math.floor(from + 1e-6)
+      ? `${amountText(t, Math.floor(amount + 1e-6) || 1)} + ${pct}` : pct;
+  }
+  if (startFrac > 1e-6) {
+    const extra = tidy(amount - (1 - startFrac));
+    return `סיום ה${label}${extra > 1e-6 ? ` + ${amountText(t, extra)}` : ''}`;
+  }
+  return amountText(t, amount);
+}
+
 function portionCard(t, p, ds) {
   const key = `${t.id}|${ds}`;
   const total = totalUnits(t);
@@ -372,8 +398,8 @@ function portionCard(t, p, ds) {
   }
   const stepper = t.mode === 'calendar' ? '' : `
     <div class="stepper" title="אפשר לשנות כמה למדת בפועל, גם חלק מיחידה">
-      <button data-act="amt" data-id="${t.id}" data-delta="-1" ${amount <= 1 / splitOf(t) + 1e-9 ? 'disabled' : ''} aria-label="פחות">−</button>
-      <span>${amountText(t, amount)}</span>
+      <button data-act="amt" data-id="${t.id}" data-delta="-1" ${stepAmount(amount, -1, rangeFrom) <= 1e-6 ? 'disabled' : ''} aria-label="פחות">−</button>
+      <span>${stepperText(t, rangeFrom, amount)}</span>
       <button data-act="amt" data-id="${t.id}" data-delta="1" ${rangeFrom + amount >= total - 1e-9 ? 'disabled' : ''} aria-label="יותר">+</button>
     </div>`;
   return `<div class="card portion ${p.done ? 'done' : ''}">
@@ -590,14 +616,6 @@ function editView() {
         <span><b>לוח קבוע</b> (כמו הדף היומי): לכל תאריך יש מנה קבועה, והלוח ממשיך גם אם לא למדתי. ימים שלא סומנו יופיעו להשלמה.</span></label>
     </fieldset>
 
-    ${d.mode !== 'calendar' ? `<label class="field narrow">
-      <span>סימון חלקי של ${esc(d.unitLabel || 'יחידה')} ארוך/ה</span>
-      <select data-field="split">
-        ${[[10, 'עשיריות – 10% בכל לחיצה (מומלץ)'], [2, 'חצאים (½)'], [3, 'שלישים (⅓)'], [4, 'רבעים (¼)'], [5, 'חמישיות (20%)']]
-          .map(([n, l]) => `<option value="${n}" ${splitOf(d) === n ? 'selected' : ''}>${l}</option>`).join('')}
-      </select>
-      <small class="muted">בכל לחיצה על "−" או "+" הכמות זזה בחלק אחד, והמנה מראה כמה אחוז מה${esc(d.unitLabel || 'יחידה')} נלמד.</small>
-    </label>` : ''}
 
     <div class="field-row">
       <label class="field"><span>תאריך התחלה</span>
@@ -755,7 +773,6 @@ function updateDraftField(el) {
     }
     case 'perDay': d.perDay = int(v); return 'change';
     case 'mode': d.mode = v; return true;
-    case 'split': d.split = Number(v) || 10; return false;
     case 'startDate': d.startDate = v || todayStr(); return false;
     case 'startPos': d.startPos = parseInt(v, 10) || 0; return false;
     case 'day': d.days[Number(el.dataset.day)] = el.checked; return false;
@@ -1127,7 +1144,8 @@ $app.addEventListener('click', (e) => {
       const key = `${t.id}|${state.date}`;
       const max = totalUnits(t) - p.from;
       const cur = p.done ? p.count : (state.pending[key] || p.count);
-      const next = Math.max(1 / splitOf(t), Math.min(max, stepAmount(cur, Number(el.dataset.delta), p.from, splitOf(t))));
+      const next = Math.min(max, stepAmount(cur, Number(el.dataset.delta), p.from));
+      if (next <= 1e-6) break;
       if (p.done) safe(() => state.store.setLog(t.id, state.date, next));
       else { state.pending[key] = next; render(); }
       break;

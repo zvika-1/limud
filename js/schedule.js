@@ -64,7 +64,7 @@ export function unitName(t, i) {
   return [loc.part.name, chapText(t, loc), t.unitLabel, numText(t, loc)].filter(Boolean).join(' ');
 }
 
-const EPS = 1e-9;
+const EPS = 1e-6;
 
 /**
  * טקסט לטווח יחידות, למשל "בראשית פרקים א׳–ב׳".
@@ -79,7 +79,7 @@ export function rangeName(t, from, count) {
   const startMid = startFrac > EPS;
   const endMid = endFrac < 1 - EPS;
   if (!startMid && !endMid) return rangeNameInt(t, a, b - a + 1);
-  const pct = (x) => `${Math.round(x * 100)}%`;
+  const pct = (x) => `${Math.floor(x * 100 + EPS)}%`;
   const half = (x) => Math.abs(x - 0.5) < EPS;
   if (a === b) {
     if (half(startFrac) && !endMid) return `${unitName(t, a)} (חצי שני)`;
@@ -93,11 +93,14 @@ export function rangeName(t, from, count) {
   return `${unitName(t, a)}${s1} – ${unitName(t, b)}${s2}`;
 }
 
-/** לכמה חלקים מחלקים יחידה בסימון חלקי (ברירת מחדל: עשיריות — 10% בכל לחיצה) */
-export const splitOf = (t) => t.split || 10;
+/**
+ * חלוקה אוטומטית של יחידה ארוכה: בכל פעם מסמנים חלק ממה שנשאר, כך שההתקדמות ביחידה היא
+ * 50% → 66% → 75% → 80%... (אם עד עכשיו נלמד f מהיחידה, הסימון הבא מגיע ל-1/(2-f)).
+ */
+export const nextPartial = (f) => 1 / (2 - f);
 
-/** עיגול לרשת של החלקים, כדי למנוע שגיאות עיגול של מספרים עשרוניים */
-export const snap = (x, n) => Math.round(x * n * 1000) / (n * 1000);
+/** עיגול קטן, כדי שחיבור של שברים לא ייצור שגיאות עיגול */
+export const tidy = (x) => Math.round(x * 1e6) / 1e6;
 
 function rangeNameInt(t, from, count) {
   if (count <= 1) return unitName(t, from);
@@ -188,7 +191,7 @@ export function portionFor(t, ds) {
   if (logged) return { from, count: Math.min(logged, Math.max(total - from, 0)), done: true };
   if (!isLearningDay(t, ds) || from >= total - EPS) return null;
   // אם אתמול נלמד רק חלק — המנה של היום משלימה עד סוף היחידה
-  let count = snap(Math.floor(from + t.perDay + EPS) - from, splitOf(t));
+  let count = tidy(Math.floor(from + t.perDay + EPS) - from);
   if (count < EPS) count = t.perDay;
   return { from, count: Math.min(count, total - from), done: false };
 }

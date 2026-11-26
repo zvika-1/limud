@@ -1,5 +1,5 @@
 {
-  "major": 2,
-  "startRun": 15,
+  "major": 3,
+  "startRun": 23,
   "_הסבר": "מספר הגרסה = major.XX, כאשר XX הוא מספר הבנייה מאז startRun (01, 02...). לעדכון רציני: מעלים את major באחד, ומעדכנים את startRun למספר הבנייה הבאה ב-GitHub Actions."
 }
