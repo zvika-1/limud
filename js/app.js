@@ -589,7 +589,7 @@ function editView() {
     ${d.mode !== 'calendar' ? `<label class="field narrow">
       <span>סימון חלקי של ${esc(d.unitLabel || 'יחידה')} ארוך/ה</span>
       <select data-field="split">
-        ${[[2, 'חצאים (½)'], [3, 'שלישים (⅓)'], [4, 'רבעים (¼)'], [5, 'חמישיות (20%)'], [10, 'עשיריות (10%)']]
+        ${[[10, 'עשיריות – 10% בכל לחיצה (מומלץ)'], [2, 'חצאים (½)'], [3, 'שלישים (⅓)'], [4, 'רבעים (¼)'], [5, 'חמישיות (20%)']]
           .map(([n, l]) => `<option value="${n}" ${splitOf(d) === n ? 'selected' : ''}>${l}</option>`).join('')}
       </select>
       <small class="muted">בכל לחיצה על "−" או "+" הכמות זזה בחלק אחד, והמנה מראה כמה אחוז מה${esc(d.unitLabel || 'יחידה')} נלמד.</small>
@@ -751,7 +751,7 @@ function updateDraftField(el) {
     }
     case 'perDay': d.perDay = int(v); return 'change';
     case 'mode': d.mode = v; return true;
-    case 'split': d.split = Number(v) || 2; return false;
+    case 'split': d.split = Number(v) || 10; return false;
     case 'startDate': d.startDate = v || todayStr(); return false;
     case 'startPos': d.startPos = parseInt(v, 10) || 0; return false;
     case 'day': d.days[Number(el.dataset.day)] = el.checked; return false;

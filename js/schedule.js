@@ -93,8 +93,8 @@ export function rangeName(t, from, count) {
   return `${unitName(t, a)}${s1} – ${unitName(t, b)}${s2}`;
 }
 
-/** לכמה חלקים מחלקים יחידה בסימון חלקי (ברירת מחדל: חצאים) */
-export const splitOf = (t) => t.split || 2;
+/** לכמה חלקים מחלקים יחידה בסימון חלקי (ברירת מחדל: עשיריות — 10% בכל לחיצה) */
+export const splitOf = (t) => t.split || 10;
 
 /** עיגול לרשת של החלקים, כדי למנוע שגיאות עיגול של מספרים עשרוניים */
 export const snap = (x, n) => Math.round(x * n * 1000) / (n * 1000);
