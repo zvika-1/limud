@@ -1,5 +1,5 @@
 // Service worker: מאפשר לאפליקציה להיפתח מהר וגם בלי אינטרנט
-const CACHE = 'limud-v18';
+const CACHE = 'limud-v19';
 const FILES = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
   'js/app.js', 'js/books.js', 'js/config.js', 'js/hebrew.js', 'js/schedule.js', 'js/store.js', 'js/fixed.js', 'js/parsha-data.js',
@@ -30,7 +30,8 @@ self.addEventListener('fetch', (e) => {
 
   // קבצי האפליקציה: קודם מהרשת (כדי לקבל עדכונים), ואם אין אינטרנט — מהמטמון
   e.respondWith(
-    fetch(e.request)
+    // cache: 'no-cache' — תמיד בודקים מול השרת אם יש גרסה חדשה (ולא משתמשים בעותק ישן של הדפדפן)
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
