@@ -90,24 +90,28 @@ async function safe(fn) {
 }
 
 const sortedTracks = () => [...state.tracks].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-/** מספר עם שברים: 0.5 → ½, 2.25 → 2¼, 0.4 → 2/5 */
-const FRACS = { '1/2': '½', '1/3': '⅓', '2/3': '⅔', '1/4': '¼', '3/4': '¾', '1/5': '⅕', '2/5': '⅖', '3/5': '⅗', '4/5': '⅘' };
+/** מספר עם שברים לתצוגה קצרה: 2 → 2, 2.5 → 2½, 2.3 → 2.3 */
 const fmtNum = (n) => {
   const whole = Math.floor(n + 1e-9);
   const frac = n - whole;
   if (frac < 1e-6) return String(whole);
-  for (const den of [2, 3, 4, 5, 10]) {
-    const num = Math.round(frac * den);
-    if (Math.abs(frac * den - num) < 1e-6) {
-      const g = num % 2 === 0 && den % 2 === 0 ? 2 : 1;
-      const key = `${num / g}/${den / g}`;
-      return `${whole || ''}${FRACS[key] || (whole ? ' ' : '') + key}`;
-    }
-  }
-  return n.toFixed(2);
+  if (Math.abs(frac - 0.5) < 1e-6) return whole ? `${whole}½` : '½';
+  return String(Math.round(n * 10) / 10);
 };
 const unitWord = (t, n) => (n <= 1 ? t.unitLabel : (t.unitPlural || t.unitLabel));
-const amountText = (t, n) => (t.amud ? `${fmtNum(n)} ${n <= 1 ? 'עמוד' : 'עמודים'}` : `${fmtNum(n)} ${unitWord(t, n)}`);
+
+/** כמות לימוד: "2 פרקים", "½ פרק", "40% מהפרק", "פרק ו-30%" */
+function amountText(t, n) {
+  const label = t.amud ? 'עמוד' : t.unitLabel;
+  const plural = t.amud ? 'עמודים' : (t.unitPlural || t.unitLabel);
+  const whole = Math.floor(n + 1e-9);
+  const frac = n - whole;
+  const pct = Math.round(frac * 100);
+  if (frac < 1e-6) return `${whole} ${whole === 1 ? label : plural}`;
+  if (Math.abs(frac - 0.5) < 1e-6) return `${fmtNum(n)} ${n < 1 ? label : plural}`;
+  if (!whole) return `${pct}% מה${label}`;
+  return `${whole === 1 ? label : `${whole} ${plural}`} ו-${pct}%`;
+}
 
 /**
  * הצעד הבא בכפתורי הכמות (n = לכמה חלקים מחלקים יחידה).
